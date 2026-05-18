@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date, Text, ForeignKey, true
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -9,7 +9,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False)
     password_hash = Column(String(128), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow())
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now().astimezone())
 
     records = relationship("Record", back_populates='user')
 
@@ -35,6 +35,24 @@ class Game(Base):
     # 建立反向关联
     records = relationship('Record', back_populates='game')
 
+
+class Record(Base):
+    __tablename__ = 'records'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    game_id = Column(Integer, ForeignKey('games.id'), nullable=False)
+
+    completion_date = Column(Date, nullable=False)  # 用户通关时间
+    play_time = Column(Integer, nullable=True)  # 游玩时长(小时)
+    screenshot_path = Column(String(255), nullable=False)  # WebP截图的本地存储路径
+    review_notes = Column(Text, nullable=True)  # 心得体会
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now().astimezone())
+
+    # 建立双向绑定
+    user = relationship('User', back_populates='records')
+    game = relationship('Game', back_populates='records')
+
 DATABASE_URL = "sqlite:///game_goal.db"
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -44,5 +62,6 @@ def init_db():
 
 if __name__ == "__main__":
     print("正在初始化本地数据库...")
+    _validate_models = [User, Game, Record]
     init_db()
     print("数据库表结构创建成功！")
