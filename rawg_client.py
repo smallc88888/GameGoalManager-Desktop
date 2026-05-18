@@ -13,7 +13,7 @@ class RAWGClient:
         if not self.api_key:
             print("[警告] 未检测到 RAWG_API_KEY 环境变量，请检查 .env 文件配置！")
 
-    def search_games(self, query: str, page_size: int = 5):
+    def search_games(self, query: str, page_size: int = 20):
         if not self.api_key:
             print("[错误] 缺少 API Key，无法发起请求。")
             return []
