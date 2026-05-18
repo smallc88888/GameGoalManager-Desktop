@@ -9,6 +9,8 @@ import webview
 from models import SessionLocal, init_db, User, Game, Record
 from record_service import RecordService
 from rawg_client import RAWGClient
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import session
 
 # 初始化 Flask
 app = Flask(__name__)
@@ -17,8 +19,9 @@ app.secret_key = "game_goal_manager_secret_key_fc"  # 用于支持 Session 会�
 # 💡使用 scoped_session 确保 Flask 多线程环境下的数据库连接线程安全
 db_session = scoped_session(SessionLocal)
 
-# 模拟当前登录的用户ID (等我们在 GUI 里写好注册登录表单后，这里会动态替换为真实的 session['user_id'])
-CURRENT_USER_ID = 1
+def get_current_user_id():
+    """从 session 中动态获取当前登录用户 ID，未登录则返回 None"""
+    return session.get('user_id')
 
 
 @app.teardown_appcontext
@@ -69,6 +72,10 @@ def api_add_record():
     3. 提交通关记录接口
     对应点击最右侧带有红白边缘动效的「提交通关记录」按钮后触发的持久化逻辑
     """
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"success": False, "message": "请先登录账户后再提交通关记录！"})
+
     # 接收前端传来的表单数据
     game_id = request.form.get('game_id')
     title_en = request.form.get('title_en')
@@ -87,7 +94,7 @@ def api_add_record():
     try:
         play_time = int(play_time_raw)
     except ValueError:
-        return jsonify({"success": False, "message": "游玩时长必须是整数哦！"})
+        return jsonify({"success": False, "message": "游玩时长必须是整数！"})
 
     rawg_game_data = {
         "id": int(game_id),
@@ -102,14 +109,79 @@ def api_add_record():
 
     # 调用核心持久化逻辑
     # 把 add_completion_record 的返回值重构为了 (Object/None) 校验
-    record = service.add_completion_record(user_id=CURRENT_USER_ID, rawg_game_data=rawg_game_data, play_time=play_time,
+    record = service.add_completion_record(user_id=get_current_user_id(), rawg_game_data=rawg_game_data, play_time=play_time,
                                            screenshot_path=mock_screenshot_path)
 
     if record:
-        return jsonify({"success": True, "message": f"《{title_en}》100% 通关成功落盘！"})
+        return jsonify({"success": True, "message": f"《{title_en}》通关成功记录！"})
     else:
         return jsonify({"success": False, "message": "事务提交失败，请检查控制台回滚日志。"})
 
+@app.route('/api/auth/status')
+def auth_status():
+    """检查当前会话的登录状态"""
+    if 'user_id' in session:
+        return jsonify({
+            "logged_in": True,
+            "username": session.get('username'),
+            "user_id": session.get('user_id')
+        })
+    return jsonify({"logged_in": False})
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    """用户注册接口"""
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+
+    if not username or not password:
+        return jsonify({"success": False, "message": "用户名和密码不能为空！"})
+
+    db = db_session()
+    # 检查用户名是否已存在
+    existing_user = db.query(User).filter(User.username == username).first()
+    if existing_user:
+        return jsonify({"success": False, "message": "该用户名已被注册，换一个吧！"})
+
+    try:
+        # 使用 werkzeug 哈希加密密码
+        password_hash = generate_password_hash(password)
+        new_user = User(username=username, password_hash=password_hash)
+        db.add(new_user)
+        db.commit()
+        return jsonify({"success": True, "message": "注册成功！请前往登录。"})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"success": False, "message": f"注册失败，数据库异常: {str(e)}"})
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """用户登录接口"""
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+
+    db = db_session()
+    user = db.query(User).filter(User.username == username).first()
+
+    # 验证用户存在且密码哈希匹配
+    if user and check_password_hash(user.password_hash, password):
+        # 写入 Flask 状态 Session
+        session['user_id'] = user.id
+        session['username'] = user.username
+        return jsonify({
+            "success": True,
+            "username": user.username
+        })
+
+    return jsonify({"success": False, "message": "用户名或密码错误！"})
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    """用户登出接口"""
+    session.clear()
+    return jsonify({"success": True, "message": "已安全退出登录。"})
 
 # CEF 桌面外壳内核管理层 (Main Window)
 
