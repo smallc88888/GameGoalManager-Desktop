@@ -10,13 +10,13 @@ class RecordService:
         """
         self.db = db_session
 
-    def add_completion_record(self, user_id: int, rawg_game_data: dict, hours_played: int,
+    def add_completion_record(self, user_id: int, rawg_game_data: dict, play_time: int,
                               screenshot_path: str = None) -> Record:
         """
         核心业务：保存用户的通关记录
         :param user_id: 用户 ID
         :param rawg_game_data: 从 rawg_client 拿到的单个游戏清洗后的字典数据
-        :param hours_played: 游玩时长
+        :param play_time: 游玩时长
         :param screenshot_path: 通关截图的本地保存路径
         """
         try:
@@ -43,7 +43,7 @@ class RecordService:
             new_record = Record(
                 user_id=user_id,
                 game_id=game.id,
-                play_time=hours_played,
+                play_time=play_time,
                 screenshot_path=screenshot_path,  # 暂存本地路径
                 review_notes="100% Completed",
                 completion_date=datetime.datetime.now().astimezone().date(),  # 记录今天通关的日期
@@ -105,12 +105,8 @@ if __name__ == "__main__":
         mock_screenshot = "/uploads/screenshots/metroid_dread_100.png"
 
         # 运行持久化服务
-        service.add_completion_record(
-            user_id=test_user.id,
-            rawg_game_data=target_game_data,
-            hours_played=25,
-            screenshot_path=mock_screenshot
-        )
+        service.add_completion_record(user_id=test_user.id, rawg_game_data=target_game_data, play_time=25,
+                                      screenshot_path=mock_screenshot)
     else:
         print("[错误] 未能从 RAWG 搜到任何相关游戏，请检查网络或 .env 配置！")
 

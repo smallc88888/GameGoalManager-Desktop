@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameGoalManager - 100% 达成看板</title>
+    <style>
+        /* ==========================================
+         * 🎨 任天堂红白机美学主题设定 (Famicom Light)
+         * ========================================== */
+        :root {
+            --nintendo-red: #E60012;      /* 任天堂红 */
+            --bg-light: #F5F5F7;          /* 系统背景灰 */
+            --card-bg: #FFFFFF;           /* 纯白底色 */
+            --text-dark: #333333;         /* 深灰辅助字 */
+            --text-muted: #777777;        /* 灰度描述文字 */
+            --border-color: #E2E2E7;      /* 细分割线 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 窗口最上端的固定吸顶头部 */
+        .header-bar {
+            background-color: var(--nintendo-red);
+            padding: 12px 24px;
+            box-shadow: 0 4px 12px rgba(230, 0, 18, 0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        /* 搜索组合框布局 */
+        .search-container {
+            width: 100%;
+            max-width: 700px;
+            display: flex;
+            gap: 8px; /* 输入框与按钮的间距 */
+            position: relative;
+        }
+
+        /* 搜索输入框 */
+        .search-input {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 16px;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.95);
+            color: #000;
+            outline: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .search-input:focus {
+            background-color: #FFFFFF;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 搜索按钮 */
+        .search-submit-btn {
+            background-color: rgba(255, 255, 255, 0.95);
+            border: none;
+            border-radius: 8px;
+            padding: 0 20px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .search-submit-btn:hover {
+            background-color: #FFFFFF;
+            transform: scale(1.03);
+        }
+
+        .search-submit-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* 🎛主内容展示区 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        /* 初盘大按钮 */
+        .welcome-stage {
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn-huge {
+            background-color: var(--card-bg);
+            color: var(--nintendo-red);
+            border: 3px solid var(--nintendo-red);
+            padding: 20px 48px;
+            font-size: 22px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(230, 0, 18, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .action-btn-huge:hover {
+            background-color: var(--nintendo-red);
+            color: #FFFFFF;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(230, 0, 18, 0.25);
+        }
+
+        /* 异步游戏结果列表布局 */
+        .results-stage {
+            width: 100%;
+            max-width: 850px;
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+            align-self: flex-start;
+            margin-top: 10px;
+            padding-bottom: 40px;
+        }
+
+        /* Metacritic 风格游戏卡片 */
+        .game-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .game-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+        }
+
+        .game-cover {
+            width: 70px;
+            height: 95px;
+            object-fit: cover;
+            border-radius: 4px;
+            background-color: #E2E2E7;
+            box-shrink: 0;
+        }
+
+        .game-info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .game-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .game-meta {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .game-slug {
+            font-size: 11px;
+            background-color: #E2E2E7;
+            color: var(--text-dark);
+            padding: 2px 6px;
+            border-radius: 4px;
+            align-self: flex-start;
+            font-family: monospace;
+        }
+
+        .log-record-btn {
+            background-color: var(--card-bg);
+            color: var(--nintendo-red);
+            border: 2px solid var(--nintendo-red);
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .log-record-btn:hover {
+            background-color: var(--nintendo-red);
+            color: #FFFFFF;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header-bar">
+        <div class="search-container">
+            <input type="text" id="globalSearch" class="search-input" placeholder="输入游戏英文名称，按下回车或右侧按钮进行检索..." autocomplete="off">
+            <button id="searchSubmitBtn" class="search-submit-btn" title="发起搜索">🔍</button>
+        </div>
+    </header>
+
+    <main class="main-content">
+
+        <div id="welcomeStage" class="welcome-stage">
+            <button id="startAddBtn" class="action-btn-huge">✨ 开始添加游戏</button>
+        </div>
+
+        <div id="resultsStage" class="results-stage">
+            </div>
+
+    </main>
+
+    <script>
+        const globalSearch = document.getElementById('globalSearch');
+        const searchSubmitBtn = document.getElementById('searchSubmitBtn');
+        const startAddBtn = document.getElementById('startAddBtn');
+        const welcomeStage = document.getElementById('welcomeStage');
+        const resultsStage = document.getElementById('resultsStage');
+
+        // 1. 点击“开始添加游戏”大按钮：聚焦顶部
+        startAddBtn.addEventListener('click', () => {
+            globalSearch.focus();
+        });
+
+        // 抽取统一的搜索触发函数
+        function performSearch() {
+            const query = globalSearch.value.trim();
+
+            if (!query) {
+                // 如果输入框里啥也没有，清空状态放回主首屏
+                resultsStage.style.display = 'none';
+                welcomeStage.style.display = 'block';
+                return;
+            }
+
+            // 在控制台留个网关发射脚印
+            console.log(`[GUI] 正在发起向后端 RAWG 的请求检索: ${query}`);
+
+            fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.results.length > 0) {
+                        welcomeStage.style.display = 'none';
+                        resultsStage.style.display = 'flex';
+                        renderGameCards(data.results);
+                    } else {
+                        alert(`未能找到关于 "${query}" 的游戏信息，请更换英文关键词重试。`);
+                    }
+                })
+                .catch(err => console.error("网络网关通信异常:", err));
+        }
+
+        // 2. 联动逻辑 A：点击右侧按钮执行搜索
+        searchSubmitBtn.addEventListener('click', performSearch);
+
+        // 3. 联动逻辑 B：在输入框内按下Enter执行搜索
+        globalSearch.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // 阻止默认的表单换行提交行为
+                performSearch();
+            }
+        });
+
+        // 4. 动态拼接卡片 DOM 结构
+        function renderGameCards(games) {
+            resultsStage.innerHTML = '';
+
+            games.forEach(game => {
+                const card = document.createElement('div');
+                card.className = 'game-card';
+
+                const coverUrl = game.boxart_url ? game.boxart_url : 'https://via.placeholder.com/70x95?text=No+Cover';
+                const releaseYear = game.release_date ? game.release_date.split('-')[0] : '未知年份';
+
+                card.innerHTML = `
+                    <img src="${coverUrl}" class="game-cover" alt="Boxart">
+                    <div class="game-info">
+                        <div class="game-title">${game.title_en}</div>
+                        <div class="game-meta">发售日期: ${game.release_date || '暂无记录'} | 标识年度: ${releaseYear}</div>
+                        <div class="game-slug">${game.slug}</div>
+                    </div>
+                    <button class="log-record-btn" onclick="triggerLogFlow(${game.id}, '${escapeHtml(game.title_en)}')">
+                        🏆 提交通关记录
+                    </button>
+                `;
+                resultsStage.appendChild(card);
+            });
+        }
+
+        // 5. 点击右侧按钮触发提交通关记录逻辑
+        function triggerLogFlow(gameId, title) {
+            alert(`[触发成功] 准备为游戏 ID:${gameId} (${title}) 提交通关记录！`);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+</html>
