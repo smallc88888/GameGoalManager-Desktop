@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GameGoalManager - 100% 达成看板</title>
+    <title>GameGoalManager</title>
     <style>
         /* ==========================================
-         * 🎨 任天堂红白机美学主题设定 (Famicom Light)
+         * Famicom Light 主题设定
          * ========================================== */
         :root {
             --nintendo-red: #E60012;      /* 任天堂红 */
@@ -39,25 +39,44 @@
             padding: 12px 24px;
             box-shadow: 0 4px 12px rgba(230, 0, 18, 0.15);
             display: flex;
-            justify-content: center;
+            justify-content: space-between; /* 变为三段式布局 */
             align-items: center;
             z-index: 100;
         }
 
-        /* 搜索组合框布局 */
+        /* 回到主页组合键 */
+        .header-logo-btn {
+            background: none;
+            border: none;
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+
+        .header-logo-btn:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* 中间：搜索组合框布局 */
         .search-container {
             width: 100%;
-            max-width: 700px;
+            max-width: 550px;
             display: flex;
-            gap: 8px; /* 输入框与按钮的间距 */
-            position: relative;
+            gap: 8px;
         }
 
         /* 搜索输入框 */
         .search-input {
             flex: 1;
-            padding: 12px 20px;
-            font-size: 16px;
+            padding: 10px 16px;
+            font-size: 14px;
             border: 2px solid transparent;
             border-radius: 8px;
             background-color: rgba(255, 255, 255, 0.95);
@@ -72,19 +91,18 @@
             box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
-        /* 搜索按钮 */
+        /* 搜索提交按钮 */
         .search-submit-btn {
             background-color: rgba(255, 255, 255, 0.95);
             border: none;
             border-radius: 8px;
-            padding: 0 20px;
+            padding: 0 16px;
             cursor: pointer;
-            font-size: 18px;
+            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.2s ease;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
 
         .search-submit-btn:hover {
@@ -92,8 +110,12 @@
             transform: scale(1.03);
         }
 
-        .search-submit-btn:active {
-            transform: scale(0.97);
+        /* 右上角：预留用户登录状态栏 */
+        .user-status-bar {
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 6px 12px;
         }
 
         /* 🎛主内容展示区 */
@@ -107,38 +129,13 @@
             overflow-y: auto;
         }
 
-        /* 初盘大按钮 */
-        .welcome-stage {
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .action-btn-huge {
-            background-color: var(--card-bg);
-            color: var(--nintendo-red);
-            border: 3px solid var(--nintendo-red);
-            padding: 20px 48px;
-            font-size: 22px;
-            font-weight: bold;
-            letter-spacing: 1px;
-            border-radius: 50px;
-            cursor: pointer;
-            box-shadow: 0 6px 20px rgba(230, 0, 18, 0.1);
-            transition: all 0.2s ease;
-        }
-
-        .action-btn-huge:hover {
-            background-color: var(--nintendo-red);
-            color: #FFFFFF;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(230, 0, 18, 0.25);
-        }
-
-        /* 异步游戏结果列表布局 */
-        .results-stage {
+        /* ==========================================
+         * 🗺状态机管理
+         * ========================================== */
+        .app-stage {
             width: 100%;
             max-width: 850px;
-            display: none;
+            display: none; /* 默认全部隐藏，由 JS 精准调度开启 */
             flex-direction: column;
             gap: 16px;
             align-self: flex-start;
@@ -146,7 +143,89 @@
             padding-bottom: 40px;
         }
 
-        /* Metacritic 风格游戏卡片 */
+        /* 阶段一：首屏菜单 */
+        #welcomeStage {
+            align-self: center; /* 菜单矩阵在中央居中 */
+            margin-top: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .menu-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-dark);
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 三列布局 */
+            gap: 20px;
+            width: 100%;
+            max-width: 750px;
+        }
+
+        /* 卡片样式 */
+        .menu-card {
+            background-color: var(--card-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+/* 强高亮突出“开始添加游戏” */
+        .menu-card.primary {
+            border-color: var(--nintendo-red);
+        }
+
+        .menu-card.primary .menu-icon {
+            color: var(--nintendo-red);
+        }
+
+        .menu-icon {
+            font-size: 32px;
+            color: var(--text-dark);
+            transition: transform 0.2s ease;
+        }
+
+        .menu-label {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .menu-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(230, 0, 18, 0.08);
+        }
+
+        .menu-card.primary:hover {
+            background-color: var(--nintendo-red);
+            box-shadow: 0 8px 24px rgba(230, 0, 18, 0.2);
+        }
+        /* 当“开始添加游戏”被 hover 时，里面的文字和图标变白 */
+        .menu-card.primary:hover .menu-icon,
+        .menu-card.primary:hover .menu-label {
+            color: #FFFFFF;
+        }
+
+        .menu-card:active {
+            transform: translateY(-1px);
+        }
+
+        /* 检索列表卡片 */
         .game-card {
             background: var(--card-bg);
             border-radius: 8px;
@@ -171,7 +250,7 @@
             object-fit: cover;
             border-radius: 4px;
             background-color: #E2E2E7;
-            box-shrink: 0;
+            flex-shrink: 0;
         }
 
         .game-info {
@@ -219,106 +298,284 @@
             background-color: var(--nintendo-red);
             color: #FFFFFF;
         }
+
+        /* 我的通关记录舞台卡片 */
+        .history-card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            display: flex;
+            gap: 20px;
+        }
+
+        .history-badge {
+            background-color: #4CD964; /* 绿色表示通关 */
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            align-self: flex-start;
+        }
+
+        /* 游戏里程碑舞台占位 */
+        .milestone-container {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 30px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
 
     <header class="header-bar">
+        <button id="homeBtn" class="header-logo-btn" title="返回主菜单">
+            <span>🏠</span> 回到主页
+        </button>
+
         <div class="search-container">
             <input type="text" id="globalSearch" class="search-input" placeholder="输入游戏英文名称，按下回车或右侧按钮进行检索..." autocomplete="off">
             <button id="searchSubmitBtn" class="search-submit-btn" title="发起搜索">🔍</button>
+        </div>
+
+        <div class="user-status-bar" id="userStatusBar">
+            <span id="userInfo" style="display: none; margin-right: 12px; font-weight: 700;">👤 <span id="currentUsername"></span></span>
+            <button id="authBtn" class="log-record-btn" style="padding: 4px 12px; font-size: 12px; background: #FFF; color: var(--nintendo-red); border-color: #FFF;">登录 / 注册</button>
+            <button id="logoutBtn" class="log-record-btn" style="display: none; padding: 4px 12px; font-size: 12px; background: transparent; color: #FFF; border-color: #FFF;">退出</button>
         </div>
     </header>
 
     <main class="main-content">
 
         <div id="welcomeStage" class="welcome-stage">
-            <button id="startAddBtn" class="action-btn-huge">✨ 开始添加游戏</button>
+            <div class="menu-grid">
+                <div id="menuAddCard" class="menu-card primary">
+                    <div class="menu-icon">✨</div>
+                    <div class="menu-label">开始添加游戏</div>
+                </div>
+                <div id="menuHistoryCard" class="menu-card">
+                    <div class="menu-icon">🏆</div>
+                    <div class="menu-label">查看通关记录</div>
+                </div>
+                <div id="menuMilestoneCard" class="menu-card">
+                    <div class="menu-icon">📊</div>
+                    <div class="menu-label">生成游戏里程碑</div>
+                </div>
+            </div>
         </div>
 
-        <div id="resultsStage" class="results-stage">
+        <div id="searchStage" class="app-stage">
             </div>
+
+        <div id="historyStage" class="app-stage">
+            <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">🏆 我的游戏记录</h2>
+            <div id="historyListContainer" style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
+                </div>
+        </div>
+
+        <div id="milestoneStage" class="app-stage">
+            <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">📊 游戏数据里程碑</h2>
+            <div class="milestone-container">
+                <p style="color: var(--text-muted); font-size: 15px;">📊 正在读取game_goal.db中的通关记录进行统计...</p>
+            </div>
+        </div>
 
     </main>
 
+    <div id="authModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;">
+        <div style="background: var(--card-bg); border: 3px solid var(--nintendo-red); border-radius: 12px; width: 340px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); position: relative;">
+            <button id="closeAuthModal" style="position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);">✕</button>
+
+            <div style="display: flex; gap: 16px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 8px;">
+                <span id="tabLogin" style="font-size: 16px; font-weight: 800; color: var(--nintendo-red); cursor: pointer;">登录</span>
+                <span id="tabRegister" style="font-size: 16px; font-weight: 800; color: var(--text-muted); cursor: pointer;">注册</span>
+            </div>
+
+            <form id="authForm" onsubmit="handleAuthSubmit(event)">
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                    <div>
+                        <label style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">用户名</label>
+                        <input type="text" id="authUsername" required style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; outline: none;" autocomplete="off">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">密码</label>
+                        <input type="password" id="authPassword" required style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; outline: none;">
+                    </div>
+                    <div id="regTip" style="display: none; font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 2px;">
+                    ⚠️ 本程序不支持找回密码，请牢记自己的密码
+                    </div>
+                    <button type="submit" id="authSubmitBtn" class="log-record-btn" style="width: 100%; padding: 10px; margin-top: 6px; background-color: var(--nintendo-red); color: #FFF;">确认登录</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        // 获取所有舞台 DOM 节点
+        const welcomeStage = document.getElementById('welcomeStage');
+        const searchStage = document.getElementById('searchStage');
+        const historyStage = document.getElementById('historyStage');
+        const milestoneStage = document.getElementById('milestoneStage');
+
+        // 获取交互控件
         const globalSearch = document.getElementById('globalSearch');
         const searchSubmitBtn = document.getElementById('searchSubmitBtn');
-        const startAddBtn = document.getElementById('startAddBtn');
-        const welcomeStage = document.getElementById('welcomeStage');
-        const resultsStage = document.getElementById('resultsStage');
+        const homeBtn = document.getElementById('homeBtn');
 
-        // 1. 点击“开始添加游戏”大按钮：聚焦顶部
-        startAddBtn.addEventListener('click', () => {
-            globalSearch.focus();
+        const menuAddCard = document.getElementById('menuAddCard');
+        const menuHistoryCard = document.getElementById('menuHistoryCard');
+        const menuMilestoneCard = document.getElementById('menuMilestoneCard');
+        const historyListContainer = document.getElementById('historyListContainer');
+
+        // ==========================================
+        // 前端单页应用（SPA）核心状态机切换调度器
+        // ==========================================
+        function switchStage(targetStageId) {
+            // 1. 先把所有舞台全部隐藏
+            welcomeStage.style.display = 'none';
+            searchStage.style.display = 'none';
+            historyStage.style.display = 'none';
+            milestoneStage.style.display = 'none';
+
+            // 2. 将目标舞台拉入
+            if (targetStageId === 'welcome') {
+                welcomeStage.style.display = 'flex';
+            } else {
+                const target = document.getElementById(targetStageId);
+                if (target) {
+                    target.style.display = 'flex';
+                }
+            }
+        }
+
+        // ==========================================
+        // 回到主菜单
+        // ==========================================
+        homeBtn.addEventListener('click', () => {
+            globalSearch.value = ''; // 清空搜索框
+            searchStage.innerHTML = ''; // 清除上一次的搜索渲染
+            switchStage('welcome'); // 拨回主菜单舞台
         });
 
-        // 抽取统一的搜索触发函数
+        // ==========================================
+        // 联动：点击“开始添加游戏” -> 聚焦输入框
+        // ==========================================
+        menuAddCard.addEventListener('click', () => {
+            if (checkLoginRequired('开始添加游戏')) {
+                globalSearch.focus();
+            }
+        });
+
+        // ==========================================
+        // 联动：点击“查看通关记录” -> 切到历史记录阶段
+        // ==========================================
+        menuHistoryCard.addEventListener('click', () => {
+            if (checkLoginRequired('查看通关记录')) {
+                switchStage('historyStage');
+                loadHistoryRecords(); // 触发异步加载
+            }
+        });
+
+        // ==========================================
+        // 联动：点击“游戏里程碑” -> 切到里程碑统计展示
+        // ==========================================
+        menuMilestoneCard.addEventListener('click', () => {
+            if (checkLoginRequired('查看游戏里程碑')) {
+                switchStage('milestoneStage');
+            }
+        });
+
+        // ==========================================
+        // 核心检索逻辑（回车/按键触发）
+        // ==========================================
         function performSearch() {
             const query = globalSearch.value.trim();
-
             if (!query) {
-                // 如果输入框里啥也没有，清空状态放回主首屏
-                resultsStage.style.display = 'none';
-                welcomeStage.style.display = 'block';
+                switchStage('welcome');
                 return;
             }
 
-            // 在控制台留个网关发射脚印
-            console.log(`[GUI] 正在发起向后端 RAWG 的请求检索: ${query}`);
+            console.log(`[GUI] 发起向后端的 RAWG 检索请求: ${query}`);
 
             fetch(`/api/search?q=${encodeURIComponent(query)}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.results.length > 0) {
-                        welcomeStage.style.display = 'none';
-                        resultsStage.style.display = 'flex';
+                        switchStage('searchStage'); // 强制将舞台推切到“搜索结果”
                         renderGameCards(data.results);
                     } else {
-                        alert(`未能找到关于 "${query}" 的游戏信息，请更换英文关键词重试。`);
+                        alert(`未能找到关于 "${query}" 的游戏，请尝试更换更精准的英文名称。`);
                     }
                 })
                 .catch(err => console.error("网络网关通信异常:", err));
         }
 
-        // 2. 联动逻辑 A：点击右侧按钮执行搜索
         searchSubmitBtn.addEventListener('click', performSearch);
-
-        // 3. 联动逻辑 B：在输入框内按下Enter执行搜索
         globalSearch.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // 阻止默认的表单换行提交行为
+                e.preventDefault();
                 performSearch();
             }
         });
 
-        // 4. 动态拼接卡片 DOM 结构
+        // 渲染 RAWG 搜索卡片
         function renderGameCards(games) {
-            resultsStage.innerHTML = '';
-
+            searchStage.innerHTML = '';
             games.forEach(game => {
                 const card = document.createElement('div');
                 card.className = 'game-card';
-
                 const coverUrl = game.boxart_url ? game.boxart_url : 'https://via.placeholder.com/70x95?text=No+Cover';
-                const releaseYear = game.release_date ? game.release_date.split('-')[0] : '未知年份';
+                const parsedDate = game.release_date ? new Date(game.release_date) : null;
+                const releaseDateStr = parsedDate && !isNaN(parsedDate) ? `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}` : '未知时间';
 
                 card.innerHTML = `
                     <img src="${coverUrl}" class="game-cover" alt="Boxart">
                     <div class="game-info">
                         <div class="game-title">${game.title_en}</div>
-                        <div class="game-meta">发售日期: ${game.release_date || '暂无记录'} | 标识年度: ${releaseYear}</div>
+                        <div class="game-meta">发售时间: ${releaseDateStr}</div>
                         <div class="game-slug">${game.slug}</div>
                     </div>
                     <button class="log-record-btn" onclick="triggerLogFlow(${game.id}, '${escapeHtml(game.title_en)}')">
                         🏆 提交通关记录
                     </button>
                 `;
-                resultsStage.appendChild(card);
+                searchStage.appendChild(card);
             });
         }
 
-        // 5. 点击右侧按钮触发提交通关记录逻辑
+        // ==========================================
+        // 占位函数：读取并渲染通关记录字段通用化可视化
+        // ==========================================
+        function loadHistoryRecords() {
+            historyListContainer.innerHTML = '<p style="color: var(--text-muted);">正在加载通关记录...</p>';
+
+            // 💡 留空：下一步我们直接编写后端的 /api/records/list 路由，用真实的 db_session 吐出数据
+            // 这里先放两条可视化 Mock 示范
+            setTimeout(() => {
+                historyListContainer.innerHTML = `
+                    <div class="history-card">
+                        <img src="https://via.placeholder.com/70x95?text=Metroid" class="game-cover">
+                        <div class="game-info">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div class="game-title">Metroid Dread (密特罗德：生存恐惧)</div>
+                                <span class="history-badge">✨ 100% COMPLETED</span>
+                            </div>
+                            <div class="game-meta" style="margin-top: 4px;">
+                                ⏳ 投入时间: <strong style="color:var(--nintendo-red);">35</strong> 小时 |
+                                📅 达成日期: 2026-02-27
+                            </div>
+                            <div style="font-size: 13px; color: var(--text-dark); background:#F5F5F7; padding:8px; border-radius:6px; margin-top:6px; border-left:3px solid var(--nintendo-red);">
+                                📝 通关手记: 关卡设计神中神，全收集全道具100%达成！截图已安全转换 WebP 归档。
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }, 300);
+        }
+
         function triggerLogFlow(gameId, title) {
             alert(`[触发成功] 准备为游戏 ID:${gameId} (${title}) 提交通关记录！`);
         }
@@ -326,6 +583,124 @@
         function escapeHtml(str) {
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
+
+        // ==========================================
+        // 前端路由鉴权：拦截未登录状态并直接震荡弹出登录窗
+        // ==========================================
+        function checkLoginRequired(actionDescription) {
+            // 读取顶栏渲染状态判断是否登录
+            const isUserLoggedIn = userInfo.style.display !== 'none';
+
+            if (!isUserLoggedIn) {
+                alert(`提示：请先完成登录后再进行${actionDescription}操作！`);
+                authModal.style.display = 'flex'; // 替用户秒开登录弹窗
+                switchAuthMode('login');          // 锁定到登录卡片
+                return false;                     // 拦截
+            }
+            return true; // 鉴权成功放行
+        }
+
+        // ==========================================
+        // 用户鉴权系统 (登录/注册/状态同步) 控制链
+        // ==========================================
+        const authModal = document.getElementById('authModal');
+        const authBtn = document.getElementById('authBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const userInfo = document.getElementById('userInfo');
+        const currentUsername = document.getElementById('currentUsername');
+        const closeAuthModal = document.getElementById('closeAuthModal');
+
+        const tabLogin = document.getElementById('tabLogin');
+        const tabRegister = document.getElementById('tabRegister');
+        const authSubmitBtn = document.getElementById('authSubmitBtn');
+
+        let currentAuthMode = 'login'; // 'login' 或 'register'
+
+        // 监听弹窗打开与关闭
+        authBtn.addEventListener('click', () => { authModal.style.display = 'flex'; switchAuthMode('login'); });
+        closeAuthModal.addEventListener('click', () => { authModal.style.display = 'none'; });
+
+        // 切换登录与注册模式的 Tab 视觉效果
+        tabLogin.addEventListener('click', () => switchAuthMode('login'));
+        tabRegister.addEventListener('click', () => switchAuthMode('register'));
+
+        function switchAuthMode(mode) {
+            currentAuthMode = mode;
+            const regTip = document.getElementById('regTip');
+
+            if (mode === 'login') {
+                tabLogin.style.color = 'var(--nintendo-red)';
+                tabRegister.style.color = 'var(--text-muted)';
+                authSubmitBtn.innerText = '确认登录';
+                regTip.style.display = 'none';
+            } else {
+                tabRegister.style.color = 'var(--nintendo-red)';
+                tabLogin.style.color = 'var(--text-muted)';
+                authSubmitBtn.innerText = '创建账户';
+                regTip.style.display = 'block';
+            }
+        }
+
+        // 统一提交处理 (FormData 异步派发)
+        function handleAuthSubmit(e) {
+            e.preventDefault();
+            const user = document.getElementById('authUsername').value.trim();
+            const pass = document.getElementById('authPassword').value.trim();
+
+            const formData = new FormData();
+            formData.append('username', user);
+            formData.append('password', pass);
+
+            const targetUrl = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+
+            fetch(targetUrl, { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message);
+                    if (data.success) {
+                        if (currentAuthMode === 'login') {
+                            authModal.style.display = 'none';
+                            checkLoginStatus(); // 刷新顶栏状态
+                        } else {
+                            switchAuthMode('login'); // 注册成功自动切到登录
+                        }
+                        // 清空密码栏
+                        document.getElementById('authPassword').value = '';
+                    }
+                });
+        }
+
+        // 动态维护全局登录视图状态
+        function checkLoginStatus() {
+            fetch('/api/auth/status')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.logged_in) {
+                        currentUsername.innerText = data.username;
+                        userInfo.style.display = 'inline';
+                        logoutBtn.style.display = 'inline';
+                        authBtn.style.display = 'none';
+                    } else {
+                        userInfo.style.display = 'none';
+                        logoutBtn.style.display = 'none';
+                        authBtn.style.display = 'inline';
+                    }
+                });
+        }
+
+        // 登出处理器
+        logoutBtn.addEventListener('click', () => {
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message);
+                    checkLoginStatus();
+                    location.reload(); // 刷新页面清空内存状态，回归首屏
+                });
+        });
+
+        // 初始化加载时，自动核验一次登录留存状态
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
     </script>
 </body>
 </html>
