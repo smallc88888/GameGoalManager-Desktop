@@ -11,56 +11,65 @@ class RecordService:
         self.db = db_session
 
     def add_completion_record(self, user_id: int, rawg_game_data: dict, play_time: int,
-                              screenshot_path: str = None) -> Record:
+                              completion_date, review_notes: str = "", screenshot_path: str = None) -> Record:
         """
-        核心业务：保存用户的通关记录
-        :param user_id: 用户 ID
-        :param rawg_game_data: 从 rawg_client 拿到的单个游戏清洗后的字典数据
-        :param play_time: 游玩时长
-        :param screenshot_path: 通关截图的本地保存路径
+        保存用户的通关记录
         """
         try:
-            # 1. 防御机制：检查该游戏是否已经存在于本地数据库中（通过 RAWG 唯一的 ID 检查）
+            # 1. 检查游戏是否已存在于本地拓扑结构中
             existing_game = self.db.query(Game).filter(Game.id == rawg_game_data['id']).first()
 
             if existing_game:
                 game = existing_game
-                print(f"[提示] 游戏《{game.title_en}》已存在于数据库中，直接复用。")
+                print(f"[Service] 游戏《{game.title_en}》在本地已存在，直接绑定关联。")
             else:
-                # 如果没有，就新建一个 Game 对象并存入
+                # 万一传入的是字符串形式的游戏发售日期，在此处做最后的转换兜底
+                r_date = rawg_game_data.get('release_date')
+                if isinstance(r_date, str) and r_date.strip() != "":
+                    try:
+                        r_date = datetime.datetime.strptime(r_date.strip(), "%Y-%m-%d").date()
+                    except ValueError:
+                        r_date = None
+
                 game = Game(
                     id=rawg_game_data['id'],
                     title_en=rawg_game_data['title_en'],
-                    slug=rawg_game_data['slug'],
-                    boxart_url=rawg_game_data['boxart_url'],
-                    release_date=rawg_game_data['release_date']
+                    slug=rawg_game_data.get('slug', ''),
+                    boxart_url=rawg_game_data.get('boxart_url', ''),
+                    release_date=r_date
                 )
                 self.db.add(game)
-                print(f"[成功] 新游戏《{game.title_en}》入库。")
+                self.db.flush()  # 迫使 SQLAlchemy 分配主键，但不提交整个事务
+                print(f"[Service] 发现全新卡带《{game.title_en}》，成功同步至本地游戏字典。")
 
-            # 2. 创建通关记录对象
-            # 默认状态：完成
-            new_record = Record(
+            # 对用户的通关日期进行最后的类型检查
+            if isinstance(completion_date, str) and completion_date.strip() != "":
+                try:
+                    completion_date = datetime.datetime.strptime(completion_date.strip(), "%Y-%m-%d").date()
+                except ValueError:
+                    completion_date = datetime.date.today()
+            elif not completion_date:
+                completion_date = datetime.date.today()
+
+            # 2. 正式实例化持久化通关记录模型
+            record = Record(
                 user_id=user_id,
                 game_id=game.id,
+                completion_date=completion_date,
                 play_time=play_time,
-                screenshot_path=screenshot_path,  # 暂存本地路径
-                review_notes="100% Completed",
-                completion_date=datetime.datetime.now().astimezone().date(),  # 记录今天通关的日期
+                screenshot_path=screenshot_path,
+                review_notes=review_notes
             )
 
-            self.db.add(new_record)
-
-            # 3. 提交事务，两张表的数据同时真正写入 .db 文件
-            self.db.commit()
-            print(f"[成功] 成功为用户 ID:{user_id} 绑定《{game.title_en}》的100%通关记录！")
-            return new_record
+            self.db.add(record)
+            self.db.commit()  # 提交整体事务，确保原子性
+            print(f"[Service] 事务提交：用户 {user_id} 的通关记录落盘成功。")
+            return record
 
         except Exception as e:
-            # 如果中间任何一步崩了（比如数据库断开、字段溢出），立刻回滚
-            self.db.rollback()
-            print(f"[重大错误] 保存记录失败，数据库已安全回Rollback。错误信息: {e}")
-            return None
+            self.db.rollback()  # 触发异常时必须回滚数据库连接，防止破坏连接池状态
+            print(f"[Service 事务回滚] 保存通关记录失败: {e}")
+            raise e
 
 
 if __name__ == "__main__":
