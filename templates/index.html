@@ -413,7 +413,75 @@
         </div>
     </div>
 
+    <div id="logRecordModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.5); z-index: 9999; justify-content: center; align-items: center;">
+
+        <div class="modal-content" style="background-color: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 25px rgba(0,0,0,0.3); width: 90%; max-width: 480px; box-sizing: border-box; border-top: 6px solid var(--nintendo-red, #E60012);">
+
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+                <h3 id="logRecordTitle" style="font-size: 18px; color: #333; font-weight: bold; margin: 0;">🏆 提交通关记录</h3>
+                <span class="close-btn" id="closeRecordBtn" style="font-size: 24px; cursor: pointer; color: #999; line-height: 1; transition: color 0.2s;" onmouseover="this.style.color='#E60012'" onmouseout="this.style.color='#999'">&times;</span>
+            </div>
+
+        <form id="logRecordForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 15px;">
+            <input type="hidden" id="recordGameId" name="game_id">
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                <label style="font-weight: 600; font-size: 14px; color: #444;">游戏名称</label>
+                <input type="text" id="recordGameTitleDisplay" readonly style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5; cursor: not-allowed; color: #666; font-size: 14px; box-sizing: border-box;">
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                <label style="font-weight: 600; font-size: 14px; color: #444;">通关日期 <span style="color: var(--nintendo-red, #E60012);">*</span></label>
+                <input type="date" id="recordDate" name="completion_date" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                <label style="font-weight: 600; font-size: 14px; color: #444;">游玩时长 (小时)</label>
+                <input type="number" id="recordTime" name="play_time" min="1" placeholder="例如: 45" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                <label style="font-weight: 600; font-size: 14px; color: #444;">荣誉截图</label>
+                <input type="file" id="recordScreenshot" name="screenshot" accept="image/*" style="width: 100%; font-size: 13px; color: #666;">
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                <label style="font-weight: 600; font-size: 14px; color: #444;">通关评语</label>
+                <textarea id="recordNotes" name="review_notes" rows="4" placeholder="写下你对这款作品的心得体会..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; resize: none;"></textarea>
+            </div>
+
+            <button type="submit" class="auth-submit-btn" style="width: 100%; padding: 12px; background-color: var(--nintendo-red, #E60012); color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 5px;">确认提交数据</button>
+        </form>
+    </div>
+</div>
+
     <script>
+        // ==========================================
+        // 全局路由：点击游戏卡片上的“提交通关记录”时安全唤起
+        // ==========================================
+        function triggerLogFlow(gameId, title) {
+            // 防御性拦截：如果用户没登录，直接拒绝并帮他唤起登录框
+            const authBtn = document.getElementById('authBtn');
+            if (authBtn && authBtn.style.display !== 'none') {
+                alert('请先登录账号，再进行通关数据提交！');
+                const authModal = document.getElementById('authModal');
+                if (authModal) authModal.style.display = 'flex';
+                return;
+            }
+
+            // 抓取录入框组件
+            const recordGameId = document.getElementById('recordGameId');
+            const recordGameTitleDisplay = document.getElementById('recordGameTitleDisplay');
+            const logRecordModal = document.getElementById('logRecordModal');
+
+            // 确认元素存在才进行动态注入，避免 null 指针崩溃
+            if (recordGameId && recordGameTitleDisplay && logRecordModal) {
+                recordGameId.value = gameId;
+                recordGameTitleDisplay.value = title;
+                logRecordModal.style.display = 'flex'; // 成功唤起
+            }
+        }
+
         // 获取所有舞台 DOM 节点
         const welcomeStage = document.getElementById('welcomeStage');
         const searchStage = document.getElementById('searchStage');
@@ -576,10 +644,6 @@
             }, 300);
         }
 
-        function triggerLogFlow(gameId, title) {
-            alert(`[触发成功] 准备为游戏 ID:${gameId} (${title}) 提交通关记录！`);
-        }
-
         function escapeHtml(str) {
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
@@ -700,7 +764,20 @@
         });
 
         // 初始化加载时，自动核验一次登录留存状态
-        document.addEventListener('DOMContentLoaded', checkLoginStatus);
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. 原有的核验登录状态
+            checkLoginStatus();
+
+            // 2. 通关记录弹窗的关闭按钮
+            const closeRecordBtn = document.getElementById('closeRecordBtn');
+            const logRecordModal = document.getElementById('logRecordModal');
+
+            if (closeRecordBtn && logRecordModal) {
+                closeRecordBtn.addEventListener('click', () => {
+                    logRecordModal.style.display = 'none';
+                });
+            }
+        });
     </script>
 </body>
 </html>
