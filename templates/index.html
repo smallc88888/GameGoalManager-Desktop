@@ -442,7 +442,7 @@
 
             <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
                 <label style="font-weight: 600; font-size: 14px; color: #444;">荣誉截图</label>
-                <input type="file" id="recordScreenshot" name="screenshot" accept="image/*" style="width: 100%; font-size: 13px; color: #666;">
+                <input type="file" id="recordScreenshot" name="screenshot" accept="image/*" required style="width: 100%; font-size: 13px; color: #666;">
             </div>
 
             <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
@@ -452,8 +452,42 @@
 
             <button type="submit" class="auth-submit-btn" style="width: 100%; padding: 12px; background-color: var(--nintendo-red, #E60012); color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 5px;">确认提交数据</button>
         </form>
+        </div>
     </div>
-</div>
+
+    <div id="editRecordModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.5); z-index: 9999; justify-content: center; align-items: center;">
+        <div class="modal-content" style="background-color: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 25px rgba(0,0,0,0.3); width: 90%; max-width: 480px; box-sizing: border-box; border-top: 6px solid #555;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+                <h3 style="font-size: 18px; color: #333; font-weight: bold; margin: 0;">✏️ 修改通关记录</h3>
+                <span class="close-btn" id="closeEditBtn" style="font-size: 24px; cursor: pointer; color: #999; line-height: 1;">&times;</span>
+            </div>
+            <form id="editRecordForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 15px;">
+                <input type="hidden" id="editRecordId" name="record_id">
+
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-weight: 600; font-size: 14px; color: #444;">关联游戏</label>
+                    <input type="text" id="editGameTitleDisplay" readonly style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5; cursor: not-allowed; color: #666; font-size: 14px; box-sizing: border-box;">
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-weight: 600; font-size: 14px; color: #444;">通关日期 <span style="color: var(--nintendo-red, #E60012);">*</span></label>
+                    <input type="date" id="editRecordDate" name="completion_date" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-weight: 600; font-size: 14px; color: #444;">游玩时长</label>
+                    <input type="number" id="editRecordTime" name="play_time" min="1" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-weight: 600; font-size: 14px; color: #444;">荣誉截图 <span style="color:#777; font-weight:normal;">(不选则沿用原图)</span></label>
+                    <input type="file" id="editRecordScreenshot" name="screenshot" accept="image/*" style="width: 100%; font-size: 13px; color: #666;">
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-weight: 600; font-size: 14px; color: #444;">通关评语</label>
+                    <textarea id="editRecordNotes" name="review_notes" rows="4" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; resize: none;"></textarea>
+                </div>
+                <button type="submit" class="auth-submit-btn" style="width: 100%; padding: 12px; background-color: #333; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">保存修改</button>
+            </form>
+        </div>
+    </div>
 
     <script>
         // ==========================================
@@ -572,6 +606,7 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.results.length > 0) {
+                        window.lastSearchResults = data.results; //将当前检索结果挂载到全局 window 对象上作为元数据缓存
                         switchStage('searchStage'); // 强制将舞台推切到“搜索结果”
                         renderGameCards(data.results);
                     } else {
@@ -615,34 +650,158 @@
         }
 
         // ==========================================
-        // 占位函数：读取并渲染通关记录字段通用化可视化
+        // 动态读取并渲染玩家的通关时间轴
         // ==========================================
         function loadHistoryRecords() {
-            historyListContainer.innerHTML = '<p style="color: var(--text-muted);">正在加载通关记录...</p>';
+            // 开启 Loading 占位状态
+            historyListContainer.innerHTML = '<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px;">⏳ 正在读取卡带存档数据...</p>';
 
-            // 💡 留空：下一步我们直接编写后端的 /api/records/list 路由，用真实的 db_session 吐出数据
-            // 这里先放两条可视化 Mock 示范
-            setTimeout(() => {
-                historyListContainer.innerHTML = `
-                    <div class="history-card">
-                        <img src="https://via.placeholder.com/70x95?text=Metroid" class="game-cover">
-                        <div class="game-info">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <div class="game-title">Metroid Dread (密特罗德：生存恐惧)</div>
-                                <span class="history-badge">✨ 100% COMPLETED</span>
+            fetch('/api/record/list')
+                .then(res => {
+                    if (res.status === 401) throw new Error('Auth Expired');
+                    return res.json();
+                })
+                .then(data => {
+                    if (!data.success) {
+                        historyListContainer.innerHTML = `<p style="color: var(--nintendo-red);">${data.message}</p>`;
+                        return;
+                    }
+
+                    const records = data.data;
+
+                    // 如果数据库里一条记录都没有
+                    if (records.length === 0) {
+                        historyListContainer.innerHTML = `
+                            <div style="text-align: center; padding: 40px; background: var(--card-bg); border-radius: 8px; border: 1px dashed var(--border-color);">
+                                <div style="font-size: 32px; margin-bottom: 12px;">🎮</div>
+                                <div style="font-size: 16px; font-weight: bold; color: var(--text-dark);">暂无通关记录</div>
+                                <div style="font-size: 13px; color: var(--text-muted); margin-top: 6px;">回到主页，点击“开始添加游戏”来建立你的第一座纪念碑吧！</div>
                             </div>
-                            <div class="game-meta" style="margin-top: 4px;">
-                                ⏳ 投入时间: <strong style="color:var(--nintendo-red);">35</strong> 小时 |
-                                📅 达成日期: 2026-02-27
+                        `;
+                        return;
+                    }
+
+                    // 清空容器，准备循环渲染
+                    historyListContainer.innerHTML = '';
+
+                    // 遍历渲染每一张历史记录卡片
+                    records.forEach(rec => {
+                        const card = document.createElement('div');
+                        card.className = 'history-card';
+
+                        // 处理可能不存在的截图路径和评语
+                        const imgDisplay = rec.screenshot_path ?
+                            `<a href="${rec.screenshot_path}" target="_blank" title="点击查看大图"><img src="${rec.screenshot_path}" style="width: 100%; margin-top: 8px; border-radius: 4px; border: 1px solid #eee; max-height: 120px; object-fit: cover;"></a>` : '';
+
+                        const notesDisplay = rec.review_notes ?
+                            `<div style="font-size: 13px; color: var(--text-dark); background:#F5F5F7; padding:8px; border-radius:6px; margin-top:6px; border-left:3px solid var(--nintendo-red);">
+                                📝 通关手记: ${escapeHtml(rec.review_notes)}
+                            </div>` : '';
+
+                        card.innerHTML = `
+                            <img src="${rec.boxart_url}" class="game-cover" alt="Boxart">
+                            <div class="game-info" style="width: 100%; position: relative;">
+
+                                <div style="position: absolute; right: 0; top: 28px; display: flex; gap: 8px;">
+                                    <button class="log-record-btn" style="padding: 4px 10px; font-size: 11px; background:#f0f0f0; border-color:#ccc; color:#555;" onclick="openEditFlow(${rec.record_id}, '${escapeHtml(rec.game_title)}', '${rec.completion_date}', ${rec.play_time}, '${escapeHtml(rec.review_notes)}')">✏️ 修改</button>
+                                    <button class="log-record-btn" style="padding: 4px 10px; font-size: 11px; background:#fff; border-color:var(--nintendo-red); color:var(--nintendo-red);" onclick="triggerDeletePipe(${rec.record_id})">🗑️ 删除</button>
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-right: 120px;">
+                                    <div class="game-title">${escapeHtml(rec.game_title)}</div>
+                                    <span class="history-badge">✨ COMPLETED</span>
+                                </div>
+                                <div class="game-meta" style="margin-top: 4px; padding-bottom: 4px; border-bottom: 1px dashed var(--border-color);">
+                                    ⏳ 收录时间: <strong style="color:var(--nintendo-red);">${rec.play_time}</strong> 小时 |
+                                    📅 达成日期: ${rec.completion_date}
+                                </div>
+                                ${notesDisplay}
+                                ${imgDisplay}
                             </div>
-                            <div style="font-size: 13px; color: var(--text-dark); background:#F5F5F7; padding:8px; border-radius:6px; margin-top:6px; border-left:3px solid var(--nintendo-red);">
-                                📝 通关手记: 关卡设计神中神，全收集全道具100%达成！截图已安全转换 WebP 归档。
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }, 300);
+                        `;
+                        historyListContainer.appendChild(card);
+                    });
+                })
+                .catch(err => {
+                    if (err.message === 'Auth Expired') {
+                        historyListContainer.innerHTML = '<p style="color: var(--nintendo-red);">登录状态已过期，请重新登录以查看记录。</p>';
+                    } else {
+                        historyListContainer.innerHTML = '<p style="color: var(--nintendo-red);">网络通信异常，无法加载记录。</p>';
+                        console.error("[历史记录加载异常]", err);
+                    }
+                });
         }
+
+        // ==========================================
+        // 删除某条通关记录请求
+        // ==========================================
+        function triggerDeletePipe(recordId) {
+            if (!confirm("⚠️ 警告：该操作将同时删除数据库记录与webp图片文件，是否确认删除？")) {
+                return;
+            }
+
+            fetch(`/api/record/delete/${recordId}`, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message);
+                    if (data.success) {
+                        // 刷新当前的时间轴舞台视图
+                        loadHistoryRecords();
+                    }
+                })
+                .catch(err => alert("与后端通信异常: " + err));
+        }
+
+        // ==========================================
+        // 唤起修改窗并实现历史数据逆向回显
+        // ==========================================
+        function openEditFlow(recordId, gameTitle, compDate, playTime, reviewNotes) {
+            document.getElementById('editRecordId').value = recordId;
+            document.getElementById('editGameTitleDisplay').value = gameTitle;
+            document.getElementById('editRecordDate').value = compDate;
+            document.getElementById('editRecordTime').value = playTime || '';
+            document.getElementById('editRecordNotes').value = reviewNotes || '';
+
+            // 重置文件选择框
+            document.getElementById('editRecordScreenshot').value = '';
+
+            document.getElementById('editRecordModal').style.display = 'flex';
+        }
+
+        // 在 DOMContentLoaded 生命周期中挂载关闭和提交拦截器
+        document.addEventListener('DOMContentLoaded', () => {
+            // 绑定关闭按钮
+            const closeEditBtn = document.getElementById('closeEditBtn');
+            if (closeEditBtn) {
+                closeEditBtn.addEventListener('click', () => {
+                    document.getElementById('editRecordModal').style.display = 'none';
+                });
+            }
+
+            // 拦截修改表单的异步 Fetch 派发
+            const editRecordForm = document.getElementById('editRecordForm');
+            if (editRecordForm) {
+                editRecordForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const recordId = document.getElementById('editRecordId').value;
+                    const formData = new FormData(this);
+
+                    fetch(`/api/record/update/${recordId}`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.success) {
+                            document.getElementById('editRecordModal').style.display = 'none';
+                            loadHistoryRecords(); // 实时重刷渲染时间轴
+                        }
+                    })
+                    .catch(err => alert("微调提交发生网络阻断: " + err));
+                });
+            }
+        });
 
         function escapeHtml(str) {
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -775,6 +934,61 @@
             if (closeRecordBtn && logRecordModal) {
                 closeRecordBtn.addEventListener('click', () => {
                     logRecordModal.style.display = 'none';
+                });
+            }
+
+            // ==========================================
+            // 拦截通关表单，自动合并元数据并落盘
+            // ==========================================
+            const logRecordForm = document.getElementById('logRecordForm');
+            if (logRecordForm) {
+                logRecordForm.addEventListener('submit', function(e) {
+                    e.preventDefault(); // 拦截默认的 HTML 刷新跳转行为
+
+                    const gameIdInput = document.getElementById('recordGameId');
+                    if (!gameIdInput) return;
+                    const gameId = parseInt(gameIdInput.value);
+
+                    // 从全局运行时缓存中捞取该游戏的所有 RAWG 字段（slug, boxart_url 等）
+                    const targetGame = window.lastSearchResults ? window.lastSearchResults.find(g => g.id === gameId) : null;
+                    if (!targetGame) {
+                        alert("卡带元数据在内存中丢失，请重新搜索后提交！");
+                        return;
+                    }
+
+                    // 构造支持二进制图片上传的现代容器
+                    const formData = new FormData(this);
+
+                    // 💡 强力对齐：把后端 add_completion_record 所需要的游戏属性动态追加进表单容器
+                    formData.append('title_en', targetGame.title_en || '');
+                    formData.append('slug', targetGame.slug || '');
+                    formData.append('boxart_url', targetGame.boxart_url || '');
+                    formData.append('release_date', targetGame.release_date || '');
+
+                    // 发起异步落盘请求
+                    fetch('/api/record/add', {
+                        method: 'POST',
+                        body: formData // 浏览器会自动为其配置 multipart/form-data 报头
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(data.message); // 弹出成功勋章提示
+                            logRecordModal.style.display = 'none'; // 关闭弹窗
+                            this.reset(); // 清空表单，防二次提交
+
+                            // 联动刷新历史记录时间轴（后面我们会打通这个列表）
+                            if (typeof loadHistoryRecords === 'function') {
+                                loadHistoryRecords();
+                            }
+                        } else {
+                            alert(`存储失败：${data.message}`);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("[提交异常]", err);
+                        alert("网络请求失败，请检查 Flask 控制台服务状态！");
+                    });
                 });
             }
         });
