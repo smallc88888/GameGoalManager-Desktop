@@ -866,9 +866,9 @@
                                 <img src="${data.export_url}" style="max-width: 100%; border-radius: 8px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); border: 1px solid var(--border-color);">
 
                                 <br><br>
-                                <a href="${data.export_url}" download="My_Game_Milestone.png" class="auth-submit-btn" style="display: inline-block; text-decoration: none; background-color: #333; color: white; width: auto; padding: 10px 25px;">
-                                    💾 保存高清长图到本地
-                                </a>
+                                <button onclick="saveNativeImage('${data.filename}')" class="auth-submit-btn" style="display: inline-block; background-color: #333; color: white; width: auto; padding: 10px 25px; margin-top: 15px; cursor: pointer;">
+                                    💾 另存为高清长图...
+                                </button>
                             </div>
                         `;
                         // 隐藏掉原本的生成按钮
@@ -887,6 +887,32 @@
                     btn.style.backgroundColor = 'var(--nintendo-red)';
                     btn.innerHTML = originalText;
                 });
+        }
+
+        // ==========================================
+        // 核心控制器：呼叫后端唤醒 OS 原生另存为对话框
+        // ==========================================
+        function saveNativeImage(filename) {
+            fetch('/api/milestone/save_native', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filename: filename })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('🎉 长图已成功保存至您的电脑：\n\n' + data.saved_path);
+                } else if (data.message !== "用户取消了保存") {
+                    // 仅当非用户手动取消时才报错
+                    alert('保存异常：' + data.message);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('调用系统保存接口失败，请检查控制台。');
+            });
         }
 
         function escapeHtml(str) {
