@@ -12,6 +12,8 @@ from record_service import RecordService
 from rawg_client import RAWGClient
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import session
+from playwright.sync_api import sync_playwright
+import uuid
 
 # 初始化 Flask
 app = Flask(__name__)
@@ -382,6 +384,76 @@ def main():
     webview.start()
     print("[系统] 软件窗口已关闭，安全退出进程。")
 
+
+@app.route('/api/milestone/export', methods=['POST'])
+def api_export_milestone():
+    """
+    基于 Playwright 无头浏览器的 Echarts 长图自动化渲染与导出
+    """
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"success": False, "message": "鉴权失败：请先登录！"}), 401
+
+    try:
+        # 1. 捞取并拼装正序的时间轴数据
+        records = db_session.query(Record, Game).join(Game, Record.game_id == Game.id) \
+            .filter(Record.user_id == user_id) \
+            .order_by(Record.completion_date.asc()).all()
+
+        if not records:
+            return jsonify({"success": False, "message": "您的记录为空，赶快去打通第一款游戏吧！"}), 400
+
+        timeline_data = []
+        for rec, game in records:
+            timeline_data.append({
+                "date": rec.completion_date.strftime('%Y-%m-%d') if rec.completion_date else "",
+                "title": game.title_en,
+                "play_time": rec.play_time
+            })
+
+        # 2. 利用 Flask 的 Jinja2 引擎，将数据与刚才写好的 Echarts 模板合成为完整的 HTML 文本流
+        html_content = render_template('milestone_template.html', timeline_data=timeline_data)
+
+        # 3. 确立本机的物理存储路径（专门放在 exports 目录下）
+        export_dir = os.path.join(app.root_path, 'static', 'exports')
+        os.makedirs(export_dir, exist_ok=True)
+
+        # 用时间戳保证文件名绝对不重复
+        filename = f"milestone_{user_id}_{int(time.time())}.png"
+        file_path = os.path.join(export_dir, filename)
+
+        # 4. 核心高光：Playwright 无头浏览器执行静默渲染与精准截图
+        with sync_playwright() as p:
+            # 启动轻量级 Chromium，headless=True 不弹出真实浏览器窗口，全在内存中操作
+            browser = p.chromium.launch(headless=True)
+
+            # 设置页面视口大小。由于 CSS 锁死了 1000px 宽度，这里视口给 1050px 留余量
+            page = browser.new_page(viewport={"width": 1050, "height": 800})
+
+            # 强行将拼装好的 HTML 塞进内存页面中
+            page.set_content(html_content)
+
+            # 防闪崩与时序防御：强行等待 Echarts 的 canvas 标签被完全绘制到 DOM 上
+            page.wait_for_selector('#chart-container canvas')
+
+            # 定位到网页的 <body> 标签，执行元素级快照，避免截出大片空白背景
+            page.locator('body').screenshot(path=file_path)
+
+            # 关闭内核，释放系统内存
+            browser.close()
+
+        print(f"[Milestone] 成功为用户 {user_id} 生成长图：{filename}")
+
+        # 5. 将相对可访问的网络路径抛回给前端
+        return jsonify({
+            "success": True,
+            "message": "里程碑长图生成成功！",
+            "export_url": f"/static/exports/{filename}"
+        })
+
+    except Exception as e:
+        print(f"[严重] Playwright 渲染引擎崩溃: {e}")
+        return jsonify({"success": False, "message": f"渲染引擎异常: {str(e)}"}), 500
 
 if __name__ == '__main__':
     main()
