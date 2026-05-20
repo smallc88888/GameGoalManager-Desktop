@@ -55,7 +55,12 @@ def api_search():
     try:
         # 实例化网关客户端并抓取 RAWG 数据
         client = RAWGClient()
-        raw_games = client.search_games(query)
+        success, raw_games = client.search_games(query)
+
+        if not success:
+            # 如果是技术故障（如断网或Key失效），直接返回 success: False 和具体原因，不走后续逻辑
+            return jsonify({"success": False, "message": raw_games})
+
         for game in raw_games:
             r_date = game.get('release_date')
             # 检查类型，如果是 datetime.date 对象，转换为 "YYYY-MM-DD" 字符串
@@ -63,8 +68,10 @@ def api_search():
                 game['release_date'] = r_date.strftime('%Y-%m-%d')
             elif r_date is None:
                 game['release_date'] = ""  #如果 RAWG 没给发售日，传空字符串
+
         # 这里的 raw_games 已经是在 rawg_client.py 里洗干净的单条字典列表
         return jsonify({"success": True, "results": raw_games})
+
     except Exception as e:
         print(f"联网检索或序列化管道崩溃: {str(e)}")
         return jsonify({"success": False, "message": f"联网检索失败: {str(e)}"})

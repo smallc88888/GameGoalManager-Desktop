@@ -659,19 +659,38 @@
             }
 
             console.log(`[GUI] 发起向后端的 RAWG 检索请求: ${query}`);
+            // 在等待网络响应期间，给个防呆提示，防止用户以为没点上
+            globalSearch.value = '⏳ 正在检索...';
 
             fetch(`/api/search?q=${encodeURIComponent(query)}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (data.success && data.results.length > 0) {
-                        window.lastSearchResults = data.results; //将当前检索结果挂载到全局 window 对象上作为元数据缓存
-                        switchStage('searchStage'); // 强制将舞台推切到“搜索结果”
-                        renderGameCards(data.results);
-                    } else {
-                        alert(`未能找到关于 "${query}" 的游戏，请尝试更换更精准的英文名称。`);
+                    // (恢复原本的搜索词)
+                    globalSearch.value = query;
+
+                    // 分支 1：拦截后端诊断出的“技术故障”（如 API Key 无效、断网超时等）
+                    if (data.success === false) {
+                        alert(`❌ 检索失败：\n\n${data.message}`);
+                        return; // 直接阻断，不切舞台
                     }
+
+                    // 分支 2：网络与 Key 均正常，但 RAWG 数据库里真的查无此游戏
+                    if (!data.results || data.results.length === 0) {
+                        alert(`📭 查无此游戏：\n\n未能找到关于 "${query}" 的游戏，请尝试更换更精准的英文名称。`);
+                        return; // 直接阻断，不切舞台
+                    }
+
+                    // 分支 3：成功搜到游戏数据，走正常渲染流
+                    window.lastSearchResults = data.results; // 将当前检索结果挂载到全局 window 对象上作为元数据缓存
+                    switchStage('searchStage'); // 强制将舞台推切到“搜索结果”
+                    renderGameCards(data.results);
                 })
-                .catch(err => console.error("网络网关通信异常:", err));
+                .catch(err => {
+                    console.error("网络网关通信异常:", err);
+                    // 恢复搜索词
+                    globalSearch.value = query;
+                    alert("❌ 客户端通信崩溃：无法连接到本地服务，请检查控制台。");
+                });
         }
 
         searchSubmitBtn.addEventListener('click', performSearch);
@@ -712,7 +731,7 @@
         // ==========================================
         function loadHistoryRecords() {
             // 开启 Loading 占位状态
-            historyListContainer.innerHTML = '<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px;">⏳ 正在读取卡带存档数据...</p>';
+            historyListContainer.innerHTML = '<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px;">⏳ 正在读取游玩记录数据...</p>';
 
             fetch('/api/record/list')
                 .then(res => {
@@ -1133,7 +1152,7 @@
                     // 从全局运行时缓存中捞取该游戏的所有 RAWG 字段（slug, boxart_url 等）
                     const targetGame = window.lastSearchResults ? window.lastSearchResults.find(g => g.id === gameId) : null;
                     if (!targetGame) {
-                        alert("卡带元数据在内存中丢失，请重新搜索后提交！");
+                        alert("游戏元数据在内存中丢失，请重新搜索后提交！");
                         return;
                     }
 
