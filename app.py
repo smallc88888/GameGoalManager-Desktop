@@ -3,15 +3,15 @@ import sys
 import threading
 import time
 import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from sqlalchemy.orm import scoped_session
+import shutil
 import webview
 from PIL import Image
 from models import SessionLocal, init_db, User, Game, Record
 from record_service import RecordService
 from rawg_client import RAWGClient
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import session
 from playwright.sync_api import sync_playwright
 import uuid
 
@@ -384,6 +384,48 @@ def main():
     webview.start()
     print("[系统] 软件窗口已关闭，安全退出进程。")
 
+@app.route('/api/milestone/save_native', methods=['POST'])
+def api_save_native():
+    """
+    利用 pywebview 唤醒操作系统原生【另存为...】对话框
+    """
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"success": False, "message": "鉴权失败"}), 401
+
+    data = request.json
+    filename = data.get('filename')
+    if not filename:
+        return jsonify({"success": False, "message": "参数缺失：未知文件名"}), 400
+
+    # 定位刚刚通过 Playwright 生成的原始图片路径
+    source_path = os.path.join(app.root_path, 'static', 'exports', filename)
+    if not os.path.exists(source_path):
+        return jsonify({"success": False, "message": "缓存文件已丢失，请重新生成长图！"}), 404
+
+    try:
+        # 获取当前运行的 pywebview 主窗口实例
+        window = webview.windows[0]
+
+        # 唤起系统原生保存
+        result = window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename="My_Game_Milestone.png",  # 默认提供的文件名
+            file_types=('PNG 图片 (*.png)', '所有文件 (*.*)')
+        )
+
+        # result 会返回一个元组，如果用户点击了取消，result 为 None 或空
+        if result and len(result) > 0:
+            target_path = result[0]
+            # 物理复制文件到用户选择的绝对路径
+            shutil.copy(source_path, target_path)
+            return jsonify({"success": True, "message": "保存成功！", "saved_path": target_path})
+        else:
+            return jsonify({"success": False, "message": "用户取消了保存"})
+
+    except Exception as e:
+        print(f"[原生保存异常] {e}")
+        return jsonify({"success": False, "message": f"跨界调用系统存盘失败: {str(e)}"}), 500
 
 @app.route('/api/milestone/export', methods=['POST'])
 def api_export_milestone():
@@ -448,7 +490,8 @@ def api_export_milestone():
         return jsonify({
             "success": True,
             "message": "里程碑长图生成成功！",
-            "export_url": f"/static/exports/{filename}"
+            "export_url": f"/static/exports/{filename}",
+            "filename": filename
         })
 
     except Exception as e:
