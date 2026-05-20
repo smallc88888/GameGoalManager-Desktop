@@ -13,6 +13,7 @@ from record_service import RecordService
 from rawg_client import RAWGClient
 from werkzeug.security import generate_password_hash, check_password_hash
 from playwright.sync_api import sync_playwright
+from dotenv import set_key, load_dotenv
 import uuid
 
 # 初始化 Flask
@@ -35,7 +36,6 @@ def remove_session(exception=None):
 
 
 # GUI 页面路由映射层 (Controllers)
-
 @app.route('/')
 def index():
     """1. 极简的主页面"""
@@ -458,7 +458,15 @@ def api_export_milestone():
             })
 
         # 2. 利用 Flask 的 Jinja2 引擎，将数据与刚才写好的 Echarts 模板合成为完整的 HTML 文本流
-        html_content = render_template('milestone_template.html', timeline_data=timeline_data)
+        # 获取当前玩家真实的通关游戏总数
+        total_count = len(records)
+
+        # 将 timeline_data 和 total_count 一同灌入 Jinja2 模板中
+        html_content = render_template(
+            'milestone_template.html',
+            timeline_data=timeline_data,
+            total_count=total_count  # 把数字传给长图模板
+        )
 
         # 3. 确立本机的物理存储路径（专门放在 exports 目录下）
         export_dir = os.path.join(app.root_path, 'static', 'exports')
@@ -500,6 +508,37 @@ def api_export_milestone():
     except Exception as e:
         print(f"[严重] Playwright 渲染引擎崩溃: {e}")
         return jsonify({"success": False, "message": f"渲染引擎异常: {str(e)}"}), 500
+
+
+@app.route('/api/system/check_apikey')
+def check_api_key():
+    """检查当前运行环境是否已配置 RAWG API Key"""
+    # 尝试从环境变量获取
+    api_key = os.environ.get('RAWG_API_KEY')
+    return jsonify({"has_key": bool(api_key and api_key.strip())})
+
+
+@app.route('/api/system/save_apikey', methods=['POST'])
+def save_api_key():
+    """接收用户输入的 API Key 并物理落盘到 .env 文件"""
+    new_key = request.form.get('api_key', '').strip()
+    if not new_key:
+        return jsonify({"success": False, "message": "API Key 不能为空！"})
+
+    try:
+        # 定位或创建 .env 文件
+        env_path = os.path.join(app.root_path, '.env')
+
+        # 利用 dotenv 动态写入文件，永久保存
+        set_key(env_path, 'RAWG_API_KEY', new_key)
+
+        # 同步更新当前运行中的内存环境变量，使其立即生效
+        os.environ['RAWG_API_KEY'] = new_key
+
+        return jsonify({"success": True, "message": "API Key 配置成功，系统已就绪！"})
+    except Exception as e:
+        print(f"[严重] 写入 API Key 失败: {e}")
+        return jsonify({"success": False, "message": f"配置文件写入失败: {str(e)}"})
 
 if __name__ == '__main__':
     main()

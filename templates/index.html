@@ -185,7 +185,7 @@
             gap: 12px;
         }
 
-/* 强高亮突出“开始添加游戏” */
+        /* 强高亮突出“开始添加游戏” */
         .menu-card.primary {
             border-color: var(--nintendo-red);
         }
@@ -351,6 +351,11 @@
     <main class="main-content">
 
         <div id="welcomeStage" class="welcome-stage">
+            <div style="text-align: center; margin-bottom: 35px; animation: fadeIn 0.4s ease-in-out;">
+                <h1 style="font-size: 38px; font-weight: 900; color: #111111; letter-spacing: 1px; margin: 0;">
+                    GameGoalManager
+                </h1>
+            </div>
             <div class="menu-grid">
                 <div id="menuAddCard" class="menu-card primary">
                     <div class="menu-icon">✨</div>
@@ -364,6 +369,12 @@
                     <div class="menu-icon">📊</div>
                     <div class="menu-label">生成游戏里程碑</div>
                 </div>
+            </div>
+            <div style="margin-top: 35px; font-size: 13px; color: var(--text-muted); cursor: pointer; text-decoration: underline; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 4px;"
+                onclick="document.getElementById('apiKeyModal').style.display = 'flex';"
+                onmouseover="this.style.color='var(--nintendo-red)'"
+                onmouseout="this.style.color='var(--text-muted)'">
+                🔧 修改 RAWG API Key
             </div>
         </div>
 
@@ -466,7 +477,7 @@
 
             <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
                 <label style="font-weight: 600; font-size: 14px; color: #444;">游玩时长 (小时)</label>
-                <input type="number" id="recordTime" name="play_time" min="1" placeholder="例如: 45" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+                <input type="number" id="recordTime" name="play_time" min="1" placeholder="例如: 42" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
             </div>
 
             <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
@@ -514,6 +525,24 @@
                     <textarea id="editRecordNotes" name="review_notes" rows="4" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; resize: none;"></textarea>
                 </div>
                 <button type="submit" class="auth-submit-btn" style="width: 100%; padding: 12px; background-color: #333; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">保存修改</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="apiKeyModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.8); z-index: 99999; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+        <div style="background: var(--card-bg); border-top: 6px solid var(--nintendo-red); border-radius: 12px; width: 90%; max-width: 450px; padding: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); text-align: center;">
+            <div style="font-size: 40px; margin-bottom: 10px;">🔑</div>
+            <h2 style="font-size: 20px; font-weight: 800; color: #111; margin-bottom: 10px;">初始化：配置您的专属 API Key</h2>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px; text-align: left; background: #F5F5F7; padding: 15px; border-radius: 8px;">
+                为了检索游戏数据，程序需要连接至 RAWG 数据库。<br><br>
+                由于您是首次运行或密钥已失效，请前往 <a href="https://rawg.io/apidocs" target="_blank" style="color: var(--nintendo-red); font-weight: bold; text-decoration: underline;">这个链接</a> 免费注册一个 API Key，并将其粘贴在下方以激活程序。
+            </p>
+
+            <form id="apiKeyForm" style="display: flex; flex-direction: column; gap: 15px;">
+                <input type="text" id="rawgApiKeyInput" name="api_key" placeholder="在此粘贴您的 RAWG API Key..." required style="width: 100%; padding: 12px; border: 2px solid var(--border-color); border-radius: 6px; outline: none; font-family: monospace; font-size: 14px; text-align: center;">
+                <button type="submit" class="auth-submit-btn" style="width: 100%; padding: 12px; background-color: var(--nintendo-red); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer;">
+                    验证API Key并激活程序
+                </button>
             </form>
         </div>
     </div>
@@ -847,7 +876,7 @@
             const resultArea = document.getElementById('milestoneResultArea');
             const originalText = btn.innerHTML;
 
-            // 1. 封锁按钮，进入深度 Loading 状态
+            // 1. 封锁按钮，进入 Loading 状态
             btn.disabled = true;
             btn.style.backgroundColor = '#999';
             btn.innerHTML = '⏳ 正在驱动渲染引擎...';
@@ -860,15 +889,22 @@
                         resultArea.innerHTML = `
                             <div style="margin-top: 10px; text-align: center; animation: fadeIn 0.5s ease-in-out;">
                                 <h4 style="color: var(--nintendo-red); margin-bottom: 20px; font-size: 18px;">
-                                    🎉 渲染完成！这是您的专属通关数据档案：
+                                    🎉 渲染完成！您的通关数据档案如下：
                                 </h4>
 
                                 <img src="${data.export_url}" style="max-width: 100%; border-radius: 8px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); border: 1px solid var(--border-color);">
 
                                 <br><br>
-                                <button onclick="saveNativeImage('${data.filename}')" class="auth-submit-btn" style="display: inline-block; background-color: #333; color: white; width: auto; padding: 10px 25px; margin-top: 15px; cursor: pointer;">
-                                    💾 另存为高清长图...
-                                </button>
+
+                                <div style="display: flex; justify-content: center; gap: 15px; margin-top: 15px;">
+                                    <button onclick="saveNativeImage('${data.filename}')" class="auth-submit-btn" style="background-color: #333; color: white; width: auto; padding: 10px 25px; cursor: pointer; margin: 0;">
+                                        💾 另存为高清长图...
+                                    </button>
+
+                                    <button onclick="this.disabled=true; this.innerHTML='⏳ 重新生成已经开始，请等待页面刷新……'; this.style.color='var(--nintendo-red)'; this.style.borderColor='var(--nintendo-red)'; triggerMilestoneExport();" class="auth-submit-btn" style="background-color: #f0f0f0; color: #555; border: 1px solid #ccc; width: auto; padding: 10px 20px; cursor: pointer; margin: 0;">
+                                        🔄 重新生成
+                                    </button>
+                                </div>
                             </div>
                         `;
                         // 隐藏掉原本的生成按钮
@@ -1036,8 +1072,41 @@
 
         // 初始化加载时，自动核验一次登录留存状态
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. 原有的核验登录状态
-            checkLoginStatus();
+            // 1. 核查API Key情况，检验登录状态
+            // API Key 网关拦截
+            fetch('/api/system/check_apikey')
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.has_key) {
+                        // 拦截：弹出 API Key 索要窗，暂不执行其他初始化
+                        document.getElementById('apiKeyModal').style.display = 'flex';
+                    } else {
+                        // 放行：执行正常的登录状态核验
+                        checkLoginStatus();
+                    }
+                })
+                .catch(err => console.error("系统初始化检查失败:", err));
+
+            // 绑定 API Key 提交表单事件
+            const apiKeyForm = document.getElementById('apiKeyForm');
+            if (apiKeyForm) {
+                apiKeyForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const formData = new FormData(this);
+                    fetch('/api/system/save_apikey', { method: 'POST', body: formData })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert(data.message);
+                                document.getElementById('apiKeyModal').style.display = 'none';
+                                // 配置成功后，放行去核验用户登录状态
+                                checkLoginStatus();
+                            } else {
+                                alert("配置失败: " + data.message);
+                            }
+                        });
+                });
+            }
 
             // 2. 通关记录弹窗的关闭按钮
             const closeRecordBtn = document.getElementById('closeRecordBtn');
