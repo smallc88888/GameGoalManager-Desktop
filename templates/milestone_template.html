@@ -3,153 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <title>玩家通关里程碑</title>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <style>
+        /* ==========================================
+         * 1. 基础长图设定 (Famicom Light 主题)
+         * ========================================== */
         body {
-            /* 红白机 Light 主题白底风格 */
-            background-color: #F5F5F7;
-            color: #333333;
+            background-color: #F5F5F7; /* 极客风浅灰底色 */
             margin: 0;
-            padding: 40px;
+            padding: 60px 80px; /* 四周留出呼吸感 */
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            /* 锁死长图画布宽度，确保 Playwright 截图分辨率统一 */
-            width: 1000px;
+            width: 1200px; /* 锁死物理宽度，确保每次截图排版一致 */
             box-sizing: border-box;
         }
+
         .header {
             text-align: center;
-            margin-bottom: 40px;
-            border-bottom: 3px solid #E60012;
+            margin-bottom: 80px;
+            border-bottom: 4px solid #E60012;
             padding-bottom: 20px;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 34px;
-            color: #111111;
-            letter-spacing: 2px;
-            font-weight: 800;
+        .header h1 { margin: 0; font-size: 42px; color: #111; letter-spacing: 3px; font-weight: 900; }
+        .header p { color: #666; font-size: 18px; margin-top: 15px; font-weight: bold; }
+
+        /* ==========================================
+         * 2. 蛇形布局核心Flexbox
+         * ========================================== */
+        .timeline-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        .header p {
-            color: #777777;
-            font-size: 15px;
-            margin-top: 10px;
-            font-weight: 600;
+
+        .timeline-row {
+            display: flex;
+            justify-content: center;
+            gap: 60px; /* 节点之间的横向间距 */
+            margin-bottom: 80px; /* 节点之间的纵向间距（留给向下箭头） */
+            position: relative;
         }
-        /* 挂载点容器，白底卡片 */
-        #chart-container {
-            width: 100%;
-            height: 600px;
+
+        /* ==========================================
+         * 3. 通关记录单元件 (Node Card)
+         * ========================================== */
+        .node {
+            width: 280px; /* 锁死单卡宽度 */
             background-color: #FFFFFF;
             border-radius: 12px;
-            padding: 30px 20px 20px 20px;
-            box-sizing: border-box;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-            border: 1px solid #E2E2E7;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            border-top: 6px solid #E60012; /* 任天堂红卡带顶 */
+            overflow: hidden;
         }
+
+        .node-date {
+            background: #111;
+            color: #fff;
+            text-align: center;
+            padding: 8px 0;
+            font-weight: bold;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        /* 核心容器： 16:9 + contain 填充 */
+        .screenshot-container {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background-color: #E8E8ED; /* 留白处的底色 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid #eee;
+        }
+
+        .screenshot-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 保证原图不被裁切 */
+        }
+
+        .node-info {
+            padding: 15px;
+            text-align: center;
+        }
+
+        .node-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #222;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .node-meta {
+            font-size: 13px;
+            color: #666;
+            font-weight: 600;
+        }
+        .node-meta span { color: #E60012; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1>🏆 玩家通关里程碑档案</h1>
-        <p>Game Goal Manager - 游戏通关数据统计</p>
+        <h1>🏆 通关里程碑</h1>
     </div>
 
-    <div id="chart-container"></div>
+    <div class="timeline-container">
+        {% for row in timeline_data | batch(3) %}
 
-    <script>
-        // 接收 Flask 灌入的 JSON 格式时间轴数据
-        const rawData = {{ timeline_data | tojson | safe }};
+            <div class="timeline-row {% if loop.index0 % 2 != 0 %}reverse{% endif %}">
 
-        // 数据清洗管道
-        const gameTitles = rawData.map(item => item.title);
-        const playTimes = rawData.map(item => item.play_time);
+                {% for item in row %}
+                    <div class="node">
+                        <div class="node-date">📅 {{ item.date }}</div>
+                        <div class="screenshot-container">
+                            <img src="{{ item.screenshot_path }}" alt="screenshot"/>
+                        </div>
+                        <div class="node-info">
+                            <div class="node-title">{{ item.title }}</div>
+                        </div>
+                    </div>
+                {% endfor %}
 
-        // 默认的 Light 主题，防止字体变白造成隐形崩溃
-        const myChart = echarts.init(document.getElementById('chart-container'));
+            </div>
+        {% endfor %}
+    </div>
 
-        // 配置红白机极简风图表选项
-        const option = {
-            // 必须关闭动画！确保后端无头浏览器抓取时图表已完全静止
-            animation: false,
-
-            backgroundColor: 'transparent',
-            title: {
-                text: '游玩时长统计 (单位：小时)',
-                left: 'center',
-                top: 0,
-                textStyle: {
-                    color: '#333333',
-                    fontSize: 16,
-                    fontWeight: 'bold'
-                }
-            },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' }
-            },
-            grid: {
-                left: '4%',
-                right: '4%',
-                bottom: '12%',
-                containLabel: true
-            },
-            xAxis: {
-                type: 'category',
-                data: gameTitles,
-                axisLabel: {
-                    interval: 0,
-                    rotate: 25, // 游戏名过长时倾斜防重叠
-                    color: '#444444',
-                    fontWeight: 500,
-                    fontSize: 12
-                },
-                axisLine: {
-                    lineStyle: { color: '#CCCCCC' }
-                }
-            },
-            yAxis: {
-                type: 'value',
-                name: '时长 (H)',
-                nameTextStyle: { color: '#666666', fontWeight: 600 },
-                axisLabel: { color: '#666666' },
-                splitLine: {
-                    lineStyle: {
-                        color: '#E2E2E7',
-                        type: 'dashed' // 浅灰色虚线作为背景参考线，非常有质感
-                    }
-                },
-                axisLine: {
-                    show: true,
-                    lineStyle: { color: '#CCCCCC' }
-                }
-            },
-            series: [
-                {
-                    name: '游玩时长',
-                    type: 'bar',
-                    data: playTimes,
-                    // 将柱状图调色为红，并增加顶部微圆角
-                    itemStyle: {
-                        color: '#E60012',
-                        borderRadius: [4, 4, 0, 0]
-                    },
-                    // 柱子上的数字标签
-                    label: {
-                        show: true,
-                        position: 'top',
-                        color: '#E60012',
-                        fontWeight: 'bold',
-                        fontSize: 13
-                    },
-                    // 调整柱子的最大合适宽度，防止只有一款游戏时柱子粗得像堵墙
-                    barMaxWidth: 60
-                }
-            ]
-        };
-
-        // 驱动渲染
-        myChart.setOption(option);
-    </script>
 </body>
 </html>
