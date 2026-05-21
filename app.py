@@ -20,7 +20,7 @@ import uuid
 app = Flask(__name__)
 app.secret_key = "game_goal_manager_secret_key_fc"  # 用于支持 Session 会话
 
-# 💡使用 scoped_session 确保 Flask 多线程环境下的数据库连接线程安全
+# 使用 scoped_session 确保 Flask 多线程环境下的数据库连接线程安全
 db_session = scoped_session(SessionLocal)
 
 def get_current_user_id():
@@ -377,7 +377,7 @@ def main():
 
     time.sleep(0.5)  # 给后端一瞬间的启动时间
 
-    # 3. pywebview 强行拉起干净、高颜值的任天堂红白机桌面外壳窗口
+    # 3. pywebview 强行拉起桌面外壳窗口
     print("[系统] 正在通过 pywebview 拉起独立桌面看版...")
     webview.create_window(
         title="GameGoalManager",
