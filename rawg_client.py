@@ -2,8 +2,10 @@ import os
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+from config import get_data_dir
 
-load_dotenv()
+env_path = os.path.join(get_data_dir(), '.env')
+load_dotenv(env_path)
 
 class RAWGClient:
     def __init__(self):

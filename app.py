@@ -3,7 +3,10 @@ import sys
 import threading
 import time
 import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from config import get_data_dir, get_browser_dir
+# 在导入 Playwright 之前，强行劫持它的内核寻址路径
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = get_browser_dir()
+from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from sqlalchemy.orm import scoped_session
 import shutil
 import webview
@@ -13,11 +16,27 @@ from record_service import RecordService
 from rawg_client import RAWGClient
 from werkzeug.security import generate_password_hash, check_password_hash
 from playwright.sync_api import sync_playwright
-from dotenv import set_key, load_dotenv
-import uuid
+from dotenv import set_key
 
 # 初始化 Flask
-app = Flask(__name__)
+def get_resource_path(relative_path):
+    """
+    静态资源路径导航仪
+    自动判断当前是 Python 源码运行，还是 PyInstaller 打包运行，
+    从而精准定位 templates 和 static 文件夹。
+    """
+    if getattr(sys, 'frozen', False):
+        # 如果是被 PyInstaller 打包的环境，去 _MEIPASS 临时解压目录里找
+        base_path = sys._MEIPASS
+    else:
+        # 如果是开发环境，去 app.py 所在的同级目录找
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+# 初始化 Flask 时，强制为其指定已被导航仪解析过的绝对路径
+app = Flask(__name__,
+            template_folder=get_resource_path('templates'),
+            static_folder=get_resource_path('static'))
 app.secret_key = "game_goal_manager_secret_key_fc"  # 用于支持 Session 会话
 
 # 使用 scoped_session 确保 Flask 多线程环境下的数据库连接线程安全
@@ -40,6 +59,14 @@ def remove_session(exception=None):
 def index():
     """1. 极简的主页面"""
     return render_template('index.html')
+
+@app.route('/data/<path:filename>')
+def serve_portable_data(filename):
+    """
+    当浏览器请求 /data/uploads/xxx.webp 时，
+    从 data 物理目录中返回文件。
+    """
+    return send_from_directory(get_data_dir(), filename)
 
 
 @app.route('/api/search')
@@ -135,7 +162,7 @@ def api_add_record():
             return jsonify({"success": False, "message": "校验失败：截图未上传！"}), 400
 
         # 校验通过
-        upload_dir = os.path.join(app.root_path, 'static', 'uploads')
+        upload_dir = os.path.join(get_data_dir(), 'uploads')
         os.makedirs(upload_dir, exist_ok=True)
 
         timestamp = int(time.time())
@@ -144,7 +171,7 @@ def api_add_record():
 
         img = Image.open(screenshot_file)
         img.save(file_path, 'WEBP', quality=80)
-        screenshot_path = f"/static/uploads/{filename}"
+        screenshot_path = f"/data/uploads/{filename}"
 
         # 4. 交付 Service 业务层进行持久化事务处理
         record_service = RecordService(db_session)
@@ -217,13 +244,11 @@ def api_delete_record(record_id):
             return jsonify({"success": False, "message": "未找到相关通关记录或您无权操作！"}), 444
 
         # 如果在本地发现了关联的截图，执行物理空间销毁，防止撑爆硬盘
-        if record.screenshot_path and record.screenshot_path.startswith('/static/'):
-            # 拼接出本机的绝对物理物理路径
-            relative_path = record.screenshot_path.lstrip('/')
-            absolute_disk_path = os.path.join(app.root_path, relative_path)
+        if record.screenshot_path and record.screenshot_path.startswith('/data/'):
+            relative_path = record.screenshot_path.replace('/data/', '')
+            absolute_disk_path = os.path.join(get_data_dir(), relative_path)
             if os.path.exists(absolute_disk_path):
                 os.remove(absolute_disk_path)
-                print(f"[系统资产回收] 成功删除处理后的webp图片: {absolute_disk_path}")
 
         # 从 ORM 字典中移除并提交事务
         db.delete(record)
@@ -267,20 +292,21 @@ def api_update_record(record_id):
         new_screenshot = request.files.get('screenshot')
         if new_screenshot and new_screenshot.filename != '':
             # 第一步：物理清除原本残留在 static/uploads 中的老 WebP 图，防止留存冗余碎片
-            if record.screenshot_path and record.screenshot_path.startswith('/static/'):
-                old_path = os.path.join(app.root_path, record.screenshot_path.lstrip('/'))
+            if record.screenshot_path and record.screenshot_path.startswith('/data/'):
+                relative_path = record.screenshot_path.replace('/data/', '')
+                old_path = os.path.join(get_data_dir(), relative_path)
                 if os.path.exists(old_path):
                     os.remove(old_path)
 
             # 第二步：压缩并写入新图片
-            upload_dir = os.path.join(app.root_path, 'static', 'uploads')
+            upload_dir = os.path.join(get_data_dir(), 'uploads')
             timestamp = int(time.time())
             filename = f"user_{user_id}_game_{record.game_id}_edit_{timestamp}.webp"
             file_path = os.path.join(upload_dir, filename)
 
             img = Image.open(new_screenshot)
             img.save(file_path, 'WEBP', quality=80)
-            record.screenshot_path = f"/static/uploads/{filename}"
+            record.screenshot_path = f"/data/uploads/{filename}"
 
         # 3. 递交 ORM 整体变更事务
         db.commit()
@@ -406,7 +432,7 @@ def api_save_native():
         return jsonify({"success": False, "message": "参数缺失：未知文件名"}), 400
 
     # 定位刚刚通过 Playwright 生成的原始图片路径
-    source_path = os.path.join(app.root_path, 'static', 'exports', filename)
+    source_path = os.path.join(get_data_dir(), 'exports', filename)
     if not os.path.exists(source_path):
         return jsonify({"success": False, "message": "缓存文件已丢失，请重新生成长图！"}), 404
 
@@ -476,8 +502,17 @@ def api_export_milestone():
         )
 
         # 3. 确立本机的物理存储路径（专门放在 exports 目录下）
-        export_dir = os.path.join(app.root_path, 'static', 'exports')
+        export_dir = os.path.join(get_data_dir(), 'exports')
         os.makedirs(export_dir, exist_ok=True)
+
+        # 注入“自清理机制”，杜绝硬盘无限制膨胀
+        for old_file in os.listdir(export_dir):
+            if old_file.endswith('.png'):
+                old_file_path = os.path.join(export_dir, old_file)
+                try:
+                    os.remove(old_file_path)
+                except Exception as e:
+                    print(f"[警告] 清理旧长图碎片失败: {e}")
 
         # 用时间戳保证文件名绝对不重复
         filename = f"milestone_{user_id}_{int(time.time())}.png"
@@ -508,7 +543,7 @@ def api_export_milestone():
         return jsonify({
             "success": True,
             "message": "里程碑长图生成成功！",
-            "export_url": f"/static/exports/{filename}",
+            "export_url": f"/data/exports/{filename}",
             "filename": filename
         })
 
@@ -534,7 +569,7 @@ def save_api_key():
 
     try:
         # 定位或创建 .env 文件
-        env_path = os.path.join(app.root_path, '.env')
+        env_path = os.path.join(get_data_dir(), '.env')
 
         # 利用 dotenv 动态写入文件，永久保存
         set_key(env_path, 'RAWG_API_KEY', new_key)
