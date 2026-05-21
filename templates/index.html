@@ -118,7 +118,7 @@
             padding: 6px 12px;
         }
 
-        /* 🎛主内容展示区 */
+        /* 主内容展示区 */
         .main-content {
             flex: 1;
             display: flex;
@@ -130,7 +130,7 @@
         }
 
         /* ==========================================
-         * 🗺状态机管理
+         * 状态机管理
          * ========================================== */
         .app-stage {
             width: 100%;
@@ -143,7 +143,7 @@
             padding-bottom: 40px;
         }
 
-        /* 阶段一：首屏菜单 */
+        /* 首屏菜单 */
         #welcomeStage {
             align-self: center; /* 菜单矩阵在中央居中 */
             margin-top: 0;
@@ -319,7 +319,7 @@
             align-self: flex-start;
         }
 
-        /* 游戏里程碑舞台占位 */
+        /* 游戏里程碑舞台 */
         .milestone-container {
             background-color: var(--card-bg);
             border-radius: 12px;
@@ -1159,7 +1159,7 @@
                     // 构造支持二进制图片上传的现代容器
                     const formData = new FormData(this);
 
-                    // 💡 强力对齐：把后端 add_completion_record 所需要的游戏属性动态追加进表单容器
+                    // 把后端 add_completion_record 所需要的游戏属性动态追加进表单容器
                     formData.append('title_en', targetGame.title_en || '');
                     formData.append('slug', targetGame.slug || '');
                     formData.append('boxart_url', targetGame.boxart_url || '');
@@ -1177,7 +1177,7 @@
                             logRecordModal.style.display = 'none'; // 关闭弹窗
                             this.reset(); // 清空表单，防二次提交
 
-                            // 联动刷新历史记录时间轴（后面我们会打通这个列表）
+                            // 联动刷新历史记录时间轴
                             if (typeof loadHistoryRecords === 'function') {
                                 loadHistoryRecords();
                             }
