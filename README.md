@@ -24,10 +24,10 @@
 ## 🛠️ 技术栈与架构 (Tech Stack)
 
 * **后端**: `Python 3` + `Flask` (MVC 路由层)
-* **持久化**: `SQLAlchemy` (ORM) + `SQLite` (无状态本地数据库)
+* **持久化**: `SQLAlchemy` (ORM) + `SQLite` (本地数据库)
 * **网关层**: `requests` + `python-dotenv` (动态密钥热更新)
 * **自动化渲染**: `Playwright` (Headless Chromium 引擎)
-* **媒体处理**: `Pillow` (WebP 流媒体实时转换)
+* **媒体处理**: `Pillow` (WebP 图片格式转换)
 * **前端视图**: 原生 `HTML5` + `CSS3` + 原生 `JavaScript` (Fetch API)
 * **桌面外壳**: `pywebview`
 
@@ -65,6 +65,9 @@ playwright install chromium
 
 ### 3. 配置 API 密钥
 将根目录下的 .env.example 文件重命名为 .env。
+```bash
+cp .env.example .env
+```
 前往 RAWG API 免费申请你的专属密钥，并填入 .env 文件中：
 ```bash
 RAWG_API_KEY=your_api_key_here
@@ -106,7 +109,7 @@ python app.py
 ## 🛠️ Tech Stack & Architecture
 
 * **Backend Foundation**: `Python 3` + `Flask` (MVC Routing)
-* **Persistence**: `SQLAlchemy` (ORM) + `SQLite` (Stateless Local Database)
+* **Persistence**: `SQLAlchemy` (ORM) + `SQLite` (Local Database)
 * **Gateway Layer**: `requests` + `python-dotenv` (Dynamic Key Hot-swapping)
 * **Automated Rendering**: `Playwright` (Headless Chromium Engine)
 * **Media Processing**: `Pillow` (Real-time WebP Conversion)
@@ -147,6 +150,9 @@ playwright install chromium
 
 ### 3. Configure API Key
 Rename the .env.example file in the root directory to .env.
+```bash
+cp .env.example .env
+```
 Go to the RAWG API to apply for your free exclusive key, and fill it into the .env file:
 ```bash
 RAWG_API_KEY=your_api_key_here
