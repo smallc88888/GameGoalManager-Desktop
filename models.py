@@ -1,6 +1,8 @@
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date, Text, ForeignKey, true
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date, Text, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+import os
+from config import get_data_dir
 
 Base = declarative_base()
 
@@ -53,15 +55,16 @@ class Record(Base):
     user = relationship('User', back_populates='records')
     game = relationship('Game', back_populates='records')
 
-DATABASE_URL = "sqlite:///game_goal.db"
-engine = create_engine(DATABASE_URL, echo=True)
+db_path = os.path.join(get_data_dir(), "game_goal.db")
+DATABASE_URL = f"sqlite:///{db_path}"
+
+engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
 
 if __name__ == "__main__":
-    print("正在初始化本地数据库...")
-    _validate_models = [User, Game, Record]
+    print(f"正在初始化本地便携数据库至: {db_path}")
     init_db()
     print("数据库表结构创建成功！")
