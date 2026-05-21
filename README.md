@@ -57,8 +57,7 @@
 1. 前往本仓库右侧的 **[Releases]** 页面。
 2. 下载最新版本的 `GameGoalManager-Desktop-vX.X.X.zip` 压缩包。
 3. 解压至电脑任意非系统敏感目录（由于数据隔离机制，强烈建议**不要**解压在 C 盘 `Program Files` 内）。
-4. 保持 `GameGoalManager.exe` 与同级的 `data` 文件夹在同一目录下。
-5. 双击 `GameGoalManager.exe` 即可启动！
+4. 双击 `GameGoalManager.exe` 即可启动！
 
 -------------------------------------
 
@@ -119,5 +118,4 @@ This software is fully portable and requires no environment configuration.
 1. Navigate to the **[Releases]** section on the right side of this repository.
 2. Download the latest `GameGoalManager-Desktop-vX.X.X.zip`.
 3. Extract it to any non-sensitive directory (avoid `Program Files` to ensure the `data/` folder has proper write permissions).
-4. Ensure `GameGoalManager.exe` remains in the same directory as the `data` folder.
-5. Double-click `GameGoalManager.exe` to launch!
+4. Double-click `GameGoalManager.exe` to launch!
