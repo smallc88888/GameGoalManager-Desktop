@@ -718,7 +718,7 @@
                         <div class="game-meta">发售时间: ${releaseDateStr}</div>
                         <div class="game-slug">${game.slug}</div>
                     </div>
-                    <button class="log-record-btn" onclick="triggerLogFlow(${game.id}, '${escapeHtml(game.title_en)}')">
+                    <button class="log-record-btn" onclick="triggerLogFlow(${game.id}, '${escapeJS(game.title_en)}')">
                         🏆 提交通关记录
                     </button>
                 `;
@@ -786,7 +786,7 @@
                             <div class="game-info" style="width: 100%; position: relative;">
 
                                 <div style="position: absolute; right: 0; top: 0; display: flex; gap: 8px;">
-                                    <button class="log-record-btn" style="padding: 4px 10px; font-size: 11px; background:#f0f0f0; border-color:#ccc; color:#555; cursor:pointer; border-radius:4px; transition:0.2s;" onclick="openEditFlow(${rec.record_id}, '${escapeHtml(rec.game_title)}', '${rec.completion_date}', ${rec.play_time}, '${escapeHtml(rec.review_notes)}')">✏️ 修改</button>
+                                    <button class="log-record-btn" style="padding: 4px 10px; font-size: 11px; background:#f0f0f0; border-color:#ccc; color:#555; cursor:pointer; border-radius:4px; transition:0.2s;" onclick="openEditFlow(${rec.record_id}, '${escapeHtml(rec.game_title)}', '${rec.completion_date}', ${rec.play_time}, '${escapeJS(rec.review_notes)}')">✏️ 修改</button>
                                     <button class="log-record-btn" style="padding: 4px 10px; font-size: 11px; background:#fff; border-color:var(--nintendo-red); color:var(--nintendo-red); cursor:pointer; border-radius:4px; transition:0.2s;" onclick="triggerDeletePipe(${rec.record_id})">🗑️ 删除</button>
                                 </div>
 
@@ -970,8 +970,24 @@
             });
         }
 
+        // 专门用于在 <div> 等 HTML 标签中安全显示文本 (转为 HTML 实体)
         function escapeHtml(str) {
-            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;'); // 正确的 HTML 单引号实体
+        }
+
+        // 专门用于 onclick="func('...')" 这种内联 JS 传参，防止单双引号断裂
+        function escapeJS(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")  // 保留 \ 用于 JS 语法
+                .replace(/"/g, '\\"');
         }
 
         // ==========================================
