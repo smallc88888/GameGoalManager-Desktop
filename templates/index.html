@@ -411,9 +411,20 @@
                 <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
                 <h3 style="margin-bottom: 10px; color: var(--text-dark);">你的通关数据已准备就绪</h3>
                 <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 25px; line-height: 1.6;">
-                    点击下方按钮，系统将在后台启动 Playwright 渲染引擎，<br>
-                    将你所有的通关记录汇编为一张高精度 Echarts 时间轴长图。
+                    选择你想回顾的时间区间（不选则默认生成全部记录），<br>
+                    系统将在后台启动 Playwright 引擎为您生成高精度时间轴长图。
                 </p>
+
+                <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 25px;">
+                    <div style="display: flex; flex-direction: column; text-align: left;">
+                        <label style="font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">起始日期 (可选)</label>
+                        <input type="date" id="milestoneStartDate" style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; outline: none; color: var(--text-dark); background: #fafafa;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; text-align: left;">
+                        <label style="font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">结束日期 (可选)</label>
+                        <input type="date" id="milestoneEndDate" style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; outline: none; color: var(--text-dark); background: #fafafa;">
+                    </div>
+                </div>
 
                 <button id="exportMilestoneBtn" class="auth-submit-btn" style="width: 200px; margin: 0 auto; background-color: var(--nintendo-red);" onclick="triggerMilestoneExport()">
                     📸 立即生成并导出长图
@@ -891,20 +902,49 @@
         // 核心控制器：触发后端 Playwright 长图生成并回显
         // ==========================================
         function triggerMilestoneExport() {
-            const btn = document.getElementById('exportMilestoneBtn');
+            // 1. 获取日期参数并进行防呆校验
+            const startDate = document.getElementById('milestoneStartDate').value;
+            const endDate = document.getElementById('milestoneEndDate').value;
+
+            // 修复点 1：此时按钮还没被锁定。如果不通过校验，安全弹出警告并结束，无事发生。
+            if (startDate && endDate && startDate > endDate) {
+                alert("⚠️ 结束日期不能早于起始日期，请重新选择！");
+                return;
+            }
+
+            const primaryBtn = document.getElementById('exportMilestoneBtn');
+            const regenBtn = document.getElementById('regenMilestoneBtn'); // 尝试获取“重新生成”按钮
             const resultArea = document.getElementById('milestoneResultArea');
-            const originalText = btn.innerHTML;
 
-            // 1. 封锁按钮，进入 Loading 状态
-            btn.disabled = true;
-            btn.style.backgroundColor = '#999';
-            btn.innerHTML = '⏳ 正在驱动渲染引擎...';
+            // 修复点 2：在校验全部通过后，再判断是谁触发的，并安全锁定对应的按钮
+            if (regenBtn) {
+                // 如果是点击了重新生成
+                regenBtn.disabled = true;
+                regenBtn.innerHTML = '⏳ 重新生成已经开始...';
+                regenBtn.style.color = 'var(--nintendo-red)';
+                regenBtn.style.borderColor = 'var(--nintendo-red)';
+            } else if (primaryBtn) {
+                // 如果是第一次点击生成
+                primaryBtn.disabled = true;
+                primaryBtn.style.backgroundColor = '#999';
+                primaryBtn.innerHTML = '⏳ 正在驱动渲染引擎...';
+            }
 
-            fetch('/api/milestone/export', { method: 'POST' })
+            const requestPayload = {
+                start_date: startDate,
+                end_date: endDate
+            };
+
+            fetch('/api/milestone/export', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestPayload)
+            })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
-                        // 2. 清空按钮，把后端发来的长图和下载链接展示出来
                         resultArea.innerHTML = `
                             <div style="margin-top: 10px; text-align: center; animation: fadeIn 0.5s ease-in-out;">
                                 <h4 style="color: var(--nintendo-red); margin-bottom: 20px; font-size: 18px;">
@@ -920,14 +960,13 @@
                                         💾 另存为高清长图...
                                     </button>
 
-                                    <button onclick="this.disabled=true; this.innerHTML='⏳ 重新生成已经开始，请等待页面刷新……'; this.style.color='var(--nintendo-red)'; this.style.borderColor='var(--nintendo-red)'; triggerMilestoneExport();" class="auth-submit-btn" style="background-color: #f0f0f0; color: #555; border: 1px solid #ccc; width: auto; padding: 10px 20px; cursor: pointer; margin: 0;">
+                                    <button id="regenMilestoneBtn" onclick="triggerMilestoneExport()" class="auth-submit-btn" style="background-color: #f0f0f0; color: #555; border: 1px solid #ccc; width: auto; padding: 10px 20px; cursor: pointer; margin: 0;">
                                         🔄 重新生成
                                     </button>
                                 </div>
                             </div>
                         `;
-                        // 隐藏掉原本的生成按钮
-                        btn.style.display = 'none';
+                        if (primaryBtn) primaryBtn.style.display = 'none';
                     } else {
                         alert("导出失败：" + data.message);
                     }
@@ -937,10 +976,18 @@
                     console.error(err);
                 })
                 .finally(() => {
-                    // 兜底恢复
-                    btn.disabled = false;
-                    btn.style.backgroundColor = 'var(--nintendo-red)';
-                    btn.innerHTML = originalText;
+                    // 修复点 4：无论成功还是失败，在网络请求彻底结束后，重置这两个可能被锁定的按钮
+                    if (regenBtn) {
+                        regenBtn.disabled = false;
+                        regenBtn.innerHTML = '🔄 重新生成';
+                        regenBtn.style.color = '#555';
+                        regenBtn.style.borderColor = '#ccc';
+                    }
+                    if (primaryBtn) {
+                        primaryBtn.disabled = false;
+                        primaryBtn.style.backgroundColor = 'var(--nintendo-red)';
+                        primaryBtn.innerHTML = '📸 立即生成并导出长图';
+                    }
                 });
         }
 
