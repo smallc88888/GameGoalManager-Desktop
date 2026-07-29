@@ -463,20 +463,36 @@ def api_save_native():
 @app.route('/api/milestone/export', methods=['POST'])
 def api_export_milestone():
     """
-    基于 Playwright 无头浏览器的 Echarts 长图自动化渲染与导出
+    基于 Playwright 无头浏览器的 Echarts/纯CSS 长图自动化渲染与导出
+    (支持自定义始末日期过滤)
     """
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"success": False, "message": "鉴权失败：请先登录！"}), 401
 
     try:
-        # 1. 捞取并拼装正序的时间轴数据
-        records = db_session.query(Record, Game).join(Game, Record.game_id == Game.id) \
-            .filter(Record.user_id == user_id) \
-            .order_by(Record.completion_date.asc()).all()
+        # 1. 解析前端通过 JSON body 发来的日期参数
+        req_data = request.get_json() or {}
+        start_date_str = req_data.get('start_date', '').strip()
+        end_date_str = req_data.get('end_date', '').strip()
+
+        # 2. 构建基础查询句柄 (Query)
+        query = db_session.query(Record, Game).join(Game, Record.game_id == Game.id) \
+            .filter(Record.user_id == user_id)
+
+        # 3. 动态链式追加时间过滤条件
+        if start_date_str:
+            start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            query = query.filter(Record.completion_date >= start_date)
+        if end_date_str:
+            end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            query = query.filter(Record.completion_date <= end_date)
+
+        # 执行最终查询并正序排列
+        records = query.order_by(Record.completion_date.asc()).all()
 
         if not records:
-            return jsonify({"success": False, "message": "您的记录为空，赶快去打通第一款游戏吧！"}), 400
+            return jsonify({"success": False, "message": "该时间区间内没有通关记录，请重新选择！"}), 400
 
         # 获取当前运行的本地服务器根地址 (例如 http://127.0.0.1:5000)
         base_url = request.host_url.rstrip('/')
@@ -490,22 +506,22 @@ def api_export_milestone():
                 "screenshot_path": base_url + rec.screenshot_path if rec.screenshot_path else ""
             })
 
-        # 2. 利用 Flask 的 Jinja2 引擎，将数据与刚才写好的 Echarts 模板合成为完整的 HTML 文本流
-        # 获取当前玩家真实的通关游戏总数
+        # 4. 利用 Flask 的 Jinja2 引擎合成为完整的 HTML 文本流
         total_count = len(records)
 
-        # 将 timeline_data 和 total_count 一同灌入 Jinja2 模板中
+        # 5. 将选中的日期范围也作为变量灌入 Jinja2 模板中
         html_content = render_template(
             'milestone_template.html',
             timeline_data=timeline_data,
-            total_count=total_count  # 把数字传给长图模板
+            total_count=total_count,
+            start_date=start_date_str if start_date_str else None,
+            end_date=end_date_str if end_date_str else None
         )
 
-        # 3. 确立本机的物理存储路径（专门放在 exports 目录下）
+        # --- 以下渲染与保存逻辑完全保持不变 ---
         export_dir = os.path.join(get_data_dir(), 'exports')
         os.makedirs(export_dir, exist_ok=True)
 
-        # 注入“自清理机制”，杜绝硬盘无限制膨胀
         for old_file in os.listdir(export_dir):
             if old_file.endswith('.png'):
                 old_file_path = os.path.join(export_dir, old_file)
@@ -514,32 +530,19 @@ def api_export_milestone():
                 except Exception as e:
                     print(f"[警告] 清理旧长图碎片失败: {e}")
 
-        # 用时间戳保证文件名绝对不重复
         filename = f"milestone_{user_id}_{int(time.time())}.png"
         file_path = os.path.join(export_dir, filename)
 
-        # 4. 核心高光：Playwright 无头浏览器执行静默渲染与精准截图
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-
-            # 1：CSS 锁死了 1200px 宽度，所以视口需要留点余量给 1250px
             page = browser.new_page(viewport={"width": 1250, "height": 800})
-
-            # 2：直接注入 HTML，并强行等待网络空闲（确保所有 webp 图片都下载并渲染完毕）
             page.set_content(html_content, wait_until="networkidle")
-
-            # 3：等待全新的纯 CSS 外层容器
             page.wait_for_selector('.timeline-container')
-
-            # 定位到网页的 <body> 标签，执行元素级快照
             page.locator('body').screenshot(path=file_path)
-
-            # 关闭内核，释放系统内存
             browser.close()
 
-        print(f"[Milestone] 成功为用户 {user_id} 生成长图：{filename}")
+        print(f"[Milestone] 成功为用户 {user_id} 生成时间段长图：{filename}")
 
-        # 5. 将相对可访问的网络路径抛回给前端
         return jsonify({
             "success": True,
             "message": "里程碑长图生成成功！",

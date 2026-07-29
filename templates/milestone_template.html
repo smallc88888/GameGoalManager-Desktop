@@ -109,7 +109,25 @@
 
     <div class="header">
         <h1>🏆 通关里程碑</h1>
-        <p>GameGoalManager已见证您的 <span style="color: #E60012; font-size: 24px; font-weight: 900; margin: 0 4px;">{{ total_count }}</span> 次通关</p>
+
+        {% if start_date or end_date %}
+            <div style="font-size: 15px; color: #555; font-weight: 700; margin-top: 8px; background: #F5F5F7; display: inline-block; padding: 4px 14px; border-radius: 20px; border: 1px solid #E2E2E7;">
+                📅 记录区间：
+                {% if start_date and end_date %}
+                    {{ start_date }} 至 {{ end_date }}
+                {% elif start_date %}
+                    {{ start_date }} 至今
+                {% elif end_date %}
+                    截至 {{ end_date }}
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <p style="margin-top: 10px;">
+            GameGoalManager已见证您的
+            <span style="color: #E60012; font-size: 24px; font-weight: 900; margin: 0 4px;">{{ total_count }}</span>
+            次通关
+        </p>
     </div>
 
     <div class="timeline-container">
