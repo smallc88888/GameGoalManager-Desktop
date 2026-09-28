@@ -3,6 +3,8 @@ import sys
 import threading
 import time
 import datetime
+import base64
+import secrets
 from config import get_data_dir, get_browser_dir
 # 在导入 Playwright 之前，强行劫持它的内核寻址路径
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = get_browser_dir()
@@ -37,7 +39,28 @@ def get_resource_path(relative_path):
 app = Flask(__name__,
             template_folder=get_resource_path('templates'),
             static_folder=get_resource_path('static'))
-app.secret_key = "game_goal_manager_secret_key_fc"  # 用于支持 Session 会话
+def get_or_create_secret_key():
+    """
+    首次运行时生成随机密钥并持久化到 data 目录，
+    避免硬编码密钥被伪造 session，同时保证重启后会话不失效。
+    """
+    key_path = os.path.join(get_data_dir(), '.secret_key')
+    try:
+        if os.path.exists(key_path):
+            with open(key_path, 'r') as f:
+                existing = f.read().strip()
+                if existing:
+                    return existing
+        new_key = secrets.token_hex(32)
+        with open(key_path, 'w') as f:
+            f.write(new_key)
+        return new_key
+    except OSError as e:
+        # 极端情况（如目录只读）下降级为内存随机密钥，代价是重启后 session 失效
+        print(f"[警告] 密钥文件读写失败，使用临时密钥: {e}")
+        return secrets.token_hex(32)
+
+app.secret_key = get_or_create_secret_key()
 
 # 使用 scoped_session 确保 Flask 多线程环境下的数据库连接线程安全
 db_session = scoped_session(SessionLocal)
@@ -64,8 +87,11 @@ def index():
 def serve_portable_data(filename):
     """
     当浏览器请求 /data/uploads/xxx.webp 时，
-    从 data 物理目录中返回文件。
+    从 data 物理目录中返回文件（要求已登录）。
     """
+    # 本地数据资产统一要求登录会话，防止本机其它进程匿名抓取
+    if not get_current_user_id():
+        return jsonify({"success": False, "message": "鉴权失败"}), 401
     return send_from_directory(get_data_dir(), filename)
 
 
@@ -112,9 +138,16 @@ def api_add_record():
         return jsonify({"success": False, "message": "核心防御触发：检测到未登录会话，请先登录！"}), 401
 
     try:
-        # 提取并转化 RAWG 游戏元数据
+        # 提取并转化 RAWG 游戏元数据（先做类型与存在性校验）
         game_id = request.form.get('game_id', type=int)
         title_en = request.form.get('title_en')
+
+        # 核心字段防御：game_id 非法或标题缺失时，明确返回 400 而非内部 500
+        if game_id is None:
+            return jsonify({"success": False, "message": "校验失败：缺少有效的游戏 ID！"}), 400
+        if not title_en or not title_en.strip():
+            return jsonify({"success": False, "message": "校验失败：游戏标题不能为空！"}), 400
+
         slug = request.form.get('slug', default="")
         boxart_url = request.form.get('boxart_url', default="")
 
@@ -165,7 +198,7 @@ def api_add_record():
         upload_dir = os.path.join(get_data_dir(), 'uploads')
         os.makedirs(upload_dir, exist_ok=True)
 
-        timestamp = int(time.time())
+        timestamp = time.time_ns()
         filename = f"user_{user_id}_game_{game_id}_{timestamp}.webp"
         file_path = os.path.join(upload_dir, filename)
 
@@ -175,14 +208,23 @@ def api_add_record():
 
         # 4. 交付 Service 业务层进行持久化事务处理
         record_service = RecordService(db_session)
-        new_record = record_service.add_completion_record(
-            user_id=user_id,
-            rawg_game_data=rawg_game_data,
-            play_time=play_time,
-            completion_date=completion_date,  # 传入已洗净的 date 对象
-            review_notes=review_notes,
-            screenshot_path=screenshot_path
-        )
+        try:
+            new_record = record_service.add_completion_record(
+                user_id=user_id,
+                rawg_game_data=rawg_game_data,
+                play_time=play_time,
+                completion_date=completion_date,
+                review_notes=review_notes,
+                screenshot_path=screenshot_path
+            )
+        except Exception:
+            # 数据库事务回滚后，刚写入的截图成为孤儿文件，必须物理清理
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError as cleanup_err:
+                print(f"[警告] 孤儿截图清理失败: {cleanup_err}")
+            raise  # 继续抛给外层统一返回 500
 
         return jsonify({
             "success": True,
@@ -241,18 +283,25 @@ def api_delete_record(record_id):
         record = db.query(Record).filter(Record.id == record_id, Record.user_id == user_id).first()
 
         if not record:
-            return jsonify({"success": False, "message": "未找到相关通关记录或您无权操作！"}), 444
+            return jsonify({"success": False, "message": "未找到相关通关记录或您无权操作！"}), 404
 
-        # 如果在本地发现了关联的截图，执行物理空间销毁，防止撑爆硬盘
+        # 先记录待删除的物理路径，再执行数据库删除
+        screenshot_path_to_remove = None
         if record.screenshot_path and record.screenshot_path.startswith('/data/'):
             relative_path = record.screenshot_path.replace('/data/', '')
-            absolute_disk_path = os.path.join(get_data_dir(), relative_path)
-            if os.path.exists(absolute_disk_path):
-                os.remove(absolute_disk_path)
+            screenshot_path_to_remove = os.path.join(get_data_dir(), relative_path)
 
-        # 从 ORM 字典中移除并提交事务
+        # 1. 先提交数据库事务：记录从数据库中删除成功后，才动物理文件
         db.delete(record)
         db.commit()
+
+        # 2. 事务成功后，再清理磁盘上的截图；即使清理失败，也只是残留文件，不再造成数据错位
+        if screenshot_path_to_remove and os.path.exists(screenshot_path_to_remove):
+            try:
+                os.remove(screenshot_path_to_remove)
+            except OSError as e:
+                print(f"[警告] 记录已删除，但截图文件清理失败: {e}")
+
         return jsonify({"success": True, "message": "该通关记录及关联webp图片已删除！"})
 
     except Exception as e:
@@ -280,36 +329,57 @@ def api_update_record(record_id):
         play_time_raw = request.form.get('play_time', '0')
         review_notes = request.form.get('review_notes', '').strip()
 
-        # 日期安全对齐转化
+        # 日期安全对齐转化（与新增接口保持一致，格式错误返回 400 而非 500）
         if comp_date_raw:
-            record.completion_date = datetime.datetime.strptime(comp_date_raw.strip(), "%Y-%m-%d").date()
+            try:
+                record.completion_date = datetime.datetime.strptime(comp_date_raw.strip(), "%Y-%m-%d").date()
+            except ValueError:
+                return jsonify({"success": False, "message": "校验失败：通关日期格式不合法，必须为 YYYY-MM-DD！"}), 400
 
         # 游玩时间转化防御
-        record.play_time = int(play_time_raw) if play_time_raw else 0
+        try:
+            record.play_time = int(play_time_raw) if play_time_raw else 0
+        except ValueError:
+            return jsonify({"success": False, "message": "校验失败：游玩时长必须为整数！"}), 400
         record.review_notes = review_notes
 
         # 2. 查看玩家本次是否上传了新荣誉截图来覆盖原图
         new_screenshot = request.files.get('screenshot')
         if new_screenshot and new_screenshot.filename != '':
-            # 第一步：物理清除原本残留在 static/uploads 中的老 WebP 图，防止留存冗余碎片
-            if record.screenshot_path and record.screenshot_path.startswith('/data/'):
-                relative_path = record.screenshot_path.replace('/data/', '')
-                old_path = os.path.join(get_data_dir(), relative_path)
-                if os.path.exists(old_path):
-                    os.remove(old_path)
-
-            # 第二步：压缩并写入新图片
             upload_dir = os.path.join(get_data_dir(), 'uploads')
-            timestamp = int(time.time())
+            timestamp = time.time_ns()
             filename = f"user_{user_id}_game_{record.game_id}_edit_{timestamp}.webp"
             file_path = os.path.join(upload_dir, filename)
 
+            # 第一步：先压缩并写入新图片（若失败，异常会跳到外层 except，旧图完好无损）
             img = Image.open(new_screenshot)
             img.save(file_path, 'WEBP', quality=80)
+
+            # 第二步：新图写入成功后，才物理清除旧图
+            old_path = None
+            if record.screenshot_path and record.screenshot_path.startswith('/data/'):
+                relative_path = record.screenshot_path.replace('/data/', '')
+                old_path = os.path.join(get_data_dir(), relative_path)
+
+            # 第三步：更新数据库指向新图
             record.screenshot_path = f"/data/uploads/{filename}"
+
+            # 第四步：整体事务提交成功后，再清理旧图（放到 commit 之后统一处理）
+            db._pending_old_screenshot = old_path  # 临时挂在会话上，commit 成功后删除
+        else:
+            db._pending_old_screenshot = None
 
         # 3. 递交 ORM 整体变更事务
         db.commit()
+
+        # 4. 事务提交成功后，安全清理旧截图文件
+        pending_old = getattr(db, '_pending_old_screenshot', None)
+        if pending_old and os.path.exists(pending_old):
+            try:
+                os.remove(pending_old)
+            except OSError as e:
+                print(f"[警告] 记录已更新，但旧截图清理失败: {e}")
+
         return jsonify({"success": True, "message": "您的通关记录已成功修改！"})
 
     except Exception as e:
@@ -391,6 +461,18 @@ def run_flask():
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
 
 
+def wait_for_server(host="127.0.0.1", port=5000, timeout=10):
+    """轮询探测 Flask 是否已就绪，替代盲等 sleep，避免首屏白屏"""
+    import socket
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except OSError:
+            time.sleep(0.1)
+    return False
+
 def main():
     # 1. 初始化本地 SQLite 数据库拓扑
     print("[系统] 正在检查并初始化本地数据库拓扑...")
@@ -401,9 +483,12 @@ def main():
     flask_thread.daemon = True
     flask_thread.start()
 
-    time.sleep(0.5)  # 给后端一瞬间的启动时间
+    # 3. 就绪探测：确认服务器端口已可连接后再拉起窗口
+    if not wait_for_server():
+        print("[严重] Flask 服务器启动超时，请检查端口 5000 是否被占用！")
+        return
 
-    # 3. pywebview 强行拉起桌面外壳窗口
+    # 4. pywebview 强行拉起桌面外壳窗口
     print("[系统] 正在通过 pywebview 拉起独立桌面看版...")
     webview.create_window(
         title="GameGoalManager",
@@ -447,9 +532,19 @@ def api_save_native():
             file_types=('PNG 图片 (*.png)', '所有文件 (*.*)')
         )
 
-        # result 会返回一个元组，如果用户点击了取消，result 为 None 或空
-        if result and len(result) > 0:
-            target_path = result[0]
+        # 兼容性归一化：SAVE_DIALOG 返回字符串路径（部分旧版本/平台可能返回元组），
+        # 用户取消时返回 None
+        target_path = None
+        if result is None:
+            target_path = None
+        elif isinstance(result, (tuple, list)):
+            # 防御：万一运行环境返回元组形态，取第一个元素
+            if len(result) > 0 and result[0]:
+                target_path = result[0]
+        elif isinstance(result, str):
+            target_path = result
+
+        if target_path:
             # 物理复制文件到用户选择的绝对路径
             shutil.copy(source_path, target_path)
             return jsonify({"success": True, "message": "保存成功！", "saved_path": target_path})
@@ -494,16 +589,26 @@ def api_export_milestone():
         if not records:
             return jsonify({"success": False, "message": "该时间区间内没有通关记录，请重新选择！"}), 400
 
-        # 获取当前运行的本地服务器根地址 (例如 http://127.0.0.1:5000)
-        base_url = request.host_url.rstrip('/')
-
         timeline_data = []
         for rec, game in records:
+            # 将截图物理文件读取为 base64 内嵌，避免 Playwright 无会话请求 /data 被鉴权拦截
+            screenshot_data_uri = ""
+            if rec.screenshot_path and rec.screenshot_path.startswith('/data/'):
+                relative_path = rec.screenshot_path.replace('/data/', '')
+                absolute_path = os.path.join(get_data_dir(), relative_path)
+                if os.path.exists(absolute_path):
+                    try:
+                        with open(absolute_path, 'rb') as f:
+                            encoded = base64.b64encode(f.read()).decode('ascii')
+                        screenshot_data_uri = f"data:image/webp;base64,{encoded}"
+                    except OSError as e:
+                        print(f"[警告] 读取截图失败，长图中该条目将无图: {e}")
+
             timeline_data.append({
                 "date": rec.completion_date.strftime('%Y-%m-%d') if rec.completion_date else "",
                 "title": game.title_en,
                 "play_time": rec.play_time,
-                "screenshot_path": base_url + rec.screenshot_path if rec.screenshot_path else ""
+                "screenshot_path": screenshot_data_uri
             })
 
         # 4. 利用 Flask 的 Jinja2 引擎合成为完整的 HTML 文本流
@@ -518,12 +623,13 @@ def api_export_milestone():
             end_date=end_date_str if end_date_str else None
         )
 
-        # --- 以下渲染与保存逻辑完全保持不变 ---
         export_dir = os.path.join(get_data_dir(), 'exports')
         os.makedirs(export_dir, exist_ok=True)
 
+        # 只清理当前用户自己的历史长图，避免误删其他用户的缓存文件
+        user_prefix = f"milestone_{user_id}_"
         for old_file in os.listdir(export_dir):
-            if old_file.endswith('.png'):
+            if old_file.startswith(user_prefix) and old_file.endswith('.png'):
                 old_file_path = os.path.join(export_dir, old_file)
                 try:
                     os.remove(old_file_path)
