@@ -5,3 +5,4 @@ Pillow>=10.2.0
 requests>=2.31.0
 playwright>=1.42.0
 python-dotenv>=1.0.1
+pyinstaller>=6.0.0

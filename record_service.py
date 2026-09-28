@@ -101,9 +101,9 @@ if __name__ == "__main__":
     rawg = RAWGClient()
     search_keyword = "Metroid Dread"
     print(f"正在联网从 RAWG 搜索: '{search_keyword}' ...")
-    search_results = rawg.search_games(search_keyword, page_size=1)
+    success, search_results = rawg.search_games(search_keyword, page_size=1)
 
-    if search_results:
+    if success and search_results:
         target_game_data = search_results[0]
         print(f"搜索命中成功: {target_game_data['title_en']} (ID: {target_game_data['id']})")
 
@@ -116,6 +116,8 @@ if __name__ == "__main__":
         # 运行持久化服务
         service.add_completion_record(user_id=test_user.id, rawg_game_data=target_game_data, play_time=25,
                                       screenshot_path=mock_screenshot)
+    elif not success:
+        print(f"[错误] 搜索遇到技术性故障: {search_results}")
     else:
         print("[错误] 未能从 RAWG 搜到任何相关游戏，请检查网络或 .env 配置！")
 
