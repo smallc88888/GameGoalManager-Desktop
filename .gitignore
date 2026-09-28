@@ -21,3 +21,11 @@ venv/
 
 # 过滤本地私密环境变量配置文件
 .env
+
+# 过滤 PyInstaller 打包构建产物
+build/
+dist/
+GameGoalManager.spec
+
+# 过滤本地数据目录
+data/
